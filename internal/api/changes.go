@@ -24,8 +24,13 @@ func (s *Server) handleListChanges(w http.ResponseWriter, r *http.Request) {
 		tx = tx.Where("status = ?", status)
 	}
 	if search != "" {
-		like := "%" + search + "%"
-		tx = tx.Where("change_number LIKE ? OR description LIKE ?", like, like)
+		// Escape LIKE metacharacters so user input is treated as a literal
+		// substring. '!' is the escape character; it must be escaped first.
+		esc := strings.ReplaceAll(search, "!", "!!")
+		esc = strings.ReplaceAll(esc, "%", "!%")
+		esc = strings.ReplaceAll(esc, "_", "!_")
+		like := "%" + esc + "%"
+		tx = tx.Where("change_number LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!'", like, like)
 	}
 
 	var total int64
@@ -112,9 +117,7 @@ func (s *Server) handleCreateChange(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(change) //nolint:errcheck
+	jsonCreated(w, change)
 }
 
 // handleUpdateChange applies a partial update to a change record.

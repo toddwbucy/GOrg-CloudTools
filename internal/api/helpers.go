@@ -13,6 +13,14 @@ func jsonOK(w http.ResponseWriter, v any) {
 	}
 }
 
+func jsonCreated(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("json encode error", "err", err)
+	}
+}
+
 func jsonError(w http.ResponseWriter, msg string, code int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(code)
