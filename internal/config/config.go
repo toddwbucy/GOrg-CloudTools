@@ -84,6 +84,13 @@ func Load() (*Config, error) {
 		RateLimitRead:           getEnv("RATE_LIMIT_READ_ENDPOINTS", "100/minute"),
 	}
 
+	if cfg.MaxConcurrentExecutions <= 0 {
+		return nil, fmt.Errorf("MAX_CONCURRENT_EXECUTIONS must be > 0 (got %d)", cfg.MaxConcurrentExecutions)
+	}
+	if cfg.ExecutionTimeoutSecs <= 0 {
+		return nil, fmt.Errorf("EXECUTION_TIMEOUT must be > 0 (got %d)", cfg.ExecutionTimeoutSecs)
+	}
+
 	isProd := strings.EqualFold(cfg.Environment, "production")
 
 	switch {

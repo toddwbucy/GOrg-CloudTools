@@ -60,14 +60,19 @@ func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (
 		return 0, fmt.Errorf("instance_ids must not be empty")
 	}
 
+	// Normalize and validate platform before any DB or AWS interaction.
+	platform := strings.ToLower(strings.TrimSpace(req.Platform))
+	if platform == "" {
+		platform = "linux"
+	}
+	if platform != "linux" && platform != "windows" {
+		return 0, fmt.Errorf("unsupported platform %q: must be linux or windows", req.Platform)
+	}
+	req.Platform = platform
+
 	script, err := r.resolveScript(req)
 	if err != nil {
 		return 0, err
-	}
-
-	platform := req.Platform
-	if platform == "" {
-		platform = "linux"
 	}
 
 	batch := &models.ExecutionBatch{
@@ -77,6 +82,12 @@ func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (
 		SessionID:      req.SessionID,
 	}
 	if err := r.db.Create(batch).Error; err != nil {
+		// Clean up the ephemeral script we just inserted so it doesn't orphan.
+		if req.InlineScript != "" {
+			if err2 := r.db.Delete(script).Error; err2 != nil {
+				slog.Error("failed to clean up orphaned ephemeral script", "script_id", script.ID, "err", err2)
+			}
+		}
 		return 0, fmt.Errorf("creating batch: %w", err)
 	}
 
@@ -181,8 +192,20 @@ func (r *Runner) runOne(
 	}
 	exec.CommandID = commandID
 	// Persist commandID before blocking — status polling depends on this record.
+	// Abort rather than continue: without this DB record, polling is broken and
+	// the final result would also not be discoverable.
 	if err := r.db.Save(exec).Error; err != nil {
-		slog.Error("failed to persist command ID; status polling may not work", "instance", instanceID, "command_id", commandID, "err", err)
+		slog.Error("failed to persist command ID; aborting execution", "instance", instanceID, "command_id", commandID, "err", err)
+		exec.Status = models.ExecutionStatusFailed
+		exec.Error = "failed to persist command ID before polling"
+		if err2 := r.db.Save(exec).Error; err2 != nil {
+			slog.Error("failed to persist abort after command ID save failure", "instance", instanceID, "err", err2)
+		}
+		if err2 := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err2 != nil {
+			slog.Error("failed to increment failed_instances after command ID save failure", "batch_id", batchID, "err", err2)
+		}
+		return
 	}
 
 	result, err := executor.WaitForDone(ctx, commandID, instanceID)
@@ -235,7 +258,7 @@ func (r *Runner) runOne(
 func (r *Runner) resolveScript(req ScriptRequest) (*models.Script, error) {
 	if req.ScriptID != nil {
 		var s models.Script
-		if err := r.db.First(&s, *req.ScriptID).Error; err != nil {
+		if err := r.db.Where("ephemeral = ?", false).First(&s, *req.ScriptID).Error; err != nil {
 			return nil, fmt.Errorf("loading script %d: %w", *req.ScriptID, err)
 		}
 		return &s, nil
