@@ -63,7 +63,7 @@ func Load() (*Config, error) {
 		Host:                    getEnv("HOST", "0.0.0.0"),
 		Port:                    getIntEnv("PORT", 8500),
 		StaticDir:               getEnv("STATIC_DIR", "./static"),
-		CORSOrigins:             getCORSOrigins(),
+		CORSOrigins:             getCORSOrigins(getEnv("ENVIRONMENT", "development")),
 		AWSDefaultRegion:        getEnv("AWS_DEFAULT_REGION", "us-east-1"),
 		AWSAccessKeyIDCOM:       os.Getenv("AWS_ACCESS_KEY_ID_COM"),
 		AWSSecretAccessKeyCOM:   os.Getenv("AWS_SECRET_ACCESS_KEY_COM"),
@@ -143,10 +143,15 @@ func getIntEnv(key string, fallback int) int {
 }
 
 // getCORSOrigins parses CORS_ORIGINS which may be a JSON array or comma-separated list.
-func getCORSOrigins() []string {
+// When CORS_ORIGINS is unset, localhost defaults are returned only in development;
+// non-development environments get an empty allow-list to avoid accidental open CORS.
+func getCORSOrigins(env string) []string {
 	v := strings.TrimSpace(os.Getenv("CORS_ORIGINS"))
 	if v == "" {
-		return []string{"http://localhost:8500", "http://localhost:3000"}
+		if strings.EqualFold(env, "development") || env == "" {
+			return []string{"http://localhost:8500", "http://localhost:3000"}
+		}
+		return []string{}
 	}
 	// Try JSON array first (e.g. '["https://app.example.com","https://admin.example.com"]').
 	if strings.HasPrefix(v, "[") {

@@ -11,6 +11,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/config"
@@ -36,7 +37,7 @@ func NewServer(cfg *config.Config, db *gorm.DB, orgRunners map[string]*exec.OrgR
 		cfg:        cfg,
 		db:         db,
 		mux:        http.NewServeMux(),
-		ses:        middleware.NewSessionConfig(cfg.SecretKey, cfg.SessionLifetimeMinutes, cfg.Environment == "production"),
+		ses:        middleware.NewSessionConfig(cfg.SecretKey, cfg.SessionLifetimeMinutes, strings.EqualFold(cfg.Environment, "production")),
 		orgRunners: orgRunners,
 	}
 	s.registerRoutes()
@@ -98,7 +99,7 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("GET /api/scripts/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetScript)))
 	s.mux.HandleFunc("POST /api/scripts/{$}", s.handleCreateScript)
-	s.mux.HandleFunc("PUT /api/scripts/{id}", s.handleUpdateScript)
+	s.mux.HandleFunc("PATCH /api/scripts/{id}", s.handleUpdateScript)
 	s.mux.HandleFunc("DELETE /api/scripts/{id}", s.handleDeleteScript)
 
 	// ── Tool library ──────────────────────────────────────────────────────────

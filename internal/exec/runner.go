@@ -51,6 +51,14 @@ func New(db *gorm.DB, maxConcurrent, timeoutSecs int) *Runner {
 // and returns the batch ID immediately. The caller should poll
 // GET /api/exec/jobs/{id} for status.
 func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (uint, error) {
+	// Validate inputs before touching the DB or AWS.
+	if req.ScriptID != nil && req.InlineScript != "" {
+		return 0, fmt.Errorf("only one of script_id or inline_script may be provided, not both")
+	}
+	if len(req.InstanceIDs) == 0 {
+		return 0, fmt.Errorf("instance_ids must not be empty")
+	}
+
 	script, err := r.resolveScript(req)
 	if err != nil {
 		return 0, err
@@ -85,8 +93,10 @@ func (r *Runner) run(
 	platform string,
 	req ScriptRequest,
 ) {
-	r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-		Update("status", models.BatchStatusRunning)
+	if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+		Update("status", models.BatchStatusRunning).Error; err != nil {
+		slog.Error("failed to mark batch running", "batch_id", batchID, "err", err)
+	}
 
 	executor := ssm.New(cfg, r.timeoutSecs)
 	sem := make(chan struct{}, r.maxConc)
@@ -140,8 +150,10 @@ func (r *Runner) runOne(
 	}
 	if err := r.db.Create(exec).Error; err != nil {
 		slog.Error("failed to create execution record; skipping SSM send", "instance", instanceID, "batch", batchID, "err", err)
-		r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+		if err2 := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err2 != nil {
+			slog.Error("failed to increment failed_instances after create error", "batch_id", batchID, "err", err2)
+		}
 		return
 	}
 
@@ -151,13 +163,20 @@ func (r *Runner) runOne(
 	if err != nil {
 		exec.Status = models.ExecutionStatusFailed
 		exec.Error = err.Error()
-		r.db.Save(exec)
-		r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+		if err2 := r.db.Save(exec).Error; err2 != nil {
+			slog.Error("failed to persist send failure", "instance", instanceID, "batch_id", batchID, "err", err2)
+		}
+		if err2 := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err2 != nil {
+			slog.Error("failed to increment failed_instances after send error", "batch_id", batchID, "err", err2)
+		}
 		return
 	}
 	exec.CommandID = commandID
-	r.db.Save(exec) // persist commandID before blocking
+	// Persist commandID before blocking — status polling depends on this record.
+	if err := r.db.Save(exec).Error; err != nil {
+		slog.Error("failed to persist command ID; status polling may not work", "instance", instanceID, "command_id", commandID, "err", err)
+	}
 
 	result, err := executor.WaitForDone(ctx, commandID, instanceID)
 	endTime := time.Now()
@@ -166,20 +185,43 @@ func (r *Runner) runOne(
 	if err != nil {
 		exec.Status = models.ExecutionStatusFailed
 		exec.Error = err.Error()
-		r.db.Save(exec)
-		r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+		if err2 := r.db.Save(exec).Error; err2 != nil {
+			slog.Error("failed to persist execution wait error", "instance", instanceID, "batch_id", batchID, "err", err2)
+		}
+		if err2 := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err2 != nil {
+			slog.Error("failed to increment failed_instances after wait error", "batch_id", batchID, "err", err2)
+		}
 		return
 	}
 
 	exitCode := result.ExitCode
-	exec.Status = models.ExecutionStatus(result.Status)
 	exec.Output = result.Output
 	exec.Error = result.Error
 	exec.ExitCode = &exitCode
-	r.db.Save(exec)
-	r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-		UpdateColumn("completed_instances", gorm.Expr("completed_instances + 1"))
+
+	// WaitForDone returns (result, nil) for ALL terminal SSM states: Success,
+	// Failed, TimedOut, and Cancelled. Only "Success" counts as completed.
+	if result.Status == "Success" {
+		exec.Status = models.ExecutionStatusCompleted
+		if err := r.db.Save(exec).Error; err != nil {
+			slog.Error("failed to persist execution success", "instance", instanceID, "batch_id", batchID, "err", err)
+		}
+		if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("completed_instances", gorm.Expr("completed_instances + 1")).Error; err != nil {
+			slog.Error("failed to increment completed_instances", "batch_id", batchID, "err", err)
+		}
+	} else {
+		// Failed, TimedOut, Cancelled — terminal but not successful.
+		exec.Status = models.ExecutionStatusFailed
+		if err := r.db.Save(exec).Error; err != nil {
+			slog.Error("failed to persist execution terminal failure", "instance", instanceID, "batch_id", batchID, "status", result.Status, "err", err)
+		}
+		if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err != nil {
+			slog.Error("failed to increment failed_instances after terminal failure", "batch_id", batchID, "err", err)
+		}
+	}
 }
 
 // resolveScript returns the script to execute, either from the DB or inline.

@@ -66,17 +66,34 @@ func (s *Server) handleGetScript(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateScript(w http.ResponseWriter, r *http.Request) {
-	var script models.Script
-	if err := json.NewDecoder(r.Body).Decode(&script); err != nil {
+	// Decode into a whitelist struct so clients cannot set internal fields
+	// like change_id or tool_id on creation.
+	var body struct {
+		Name        string `json:"name"`
+		Content     string `json:"content"`
+		Description string `json:"description"`
+		ScriptType  string `json:"script_type"`
+		Interpreter string `json:"interpreter"`
+		IsTemplate  bool   `json:"is_template"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if script.Name == "" || script.Content == "" || script.ScriptType == "" {
+	if body.Name == "" || body.Content == "" || body.ScriptType == "" {
 		jsonError(w, "name, content, and script_type are required", http.StatusBadRequest)
 		return
 	}
-	if script.Interpreter == "" {
-		script.Interpreter = "bash"
+	if body.Interpreter == "" {
+		body.Interpreter = "bash"
+	}
+	script := models.Script{
+		Name:        body.Name,
+		Content:     body.Content,
+		Description: body.Description,
+		ScriptType:  body.ScriptType,
+		Interpreter: body.Interpreter,
+		IsTemplate:  body.IsTemplate,
 	}
 	if err := s.db.Create(&script).Error; err != nil {
 		jsonError(w, "failed to create script", http.StatusInternalServerError)
@@ -112,18 +129,34 @@ func (s *Server) handleUpdateScript(w http.ResponseWriter, r *http.Request) {
 	}
 	updates := map[string]any{}
 	if patch.Name != nil {
+		if *patch.Name == "" {
+			jsonError(w, "name must not be empty", http.StatusBadRequest)
+			return
+		}
 		updates["name"] = *patch.Name
 	}
 	if patch.Content != nil {
+		if *patch.Content == "" {
+			jsonError(w, "content must not be empty", http.StatusBadRequest)
+			return
+		}
 		updates["content"] = *patch.Content
 	}
 	if patch.Description != nil {
-		updates["description"] = *patch.Description
+		updates["description"] = *patch.Description // may be empty
 	}
 	if patch.ScriptType != nil {
+		if *patch.ScriptType == "" {
+			jsonError(w, "script_type must not be empty", http.StatusBadRequest)
+			return
+		}
 		updates["script_type"] = *patch.ScriptType
 	}
 	if patch.Interpreter != nil {
+		if *patch.Interpreter == "" {
+			jsonError(w, "interpreter must not be empty", http.StatusBadRequest)
+			return
+		}
 		updates["interpreter"] = *patch.Interpreter
 	}
 	if patch.IsTemplate != nil {
