@@ -30,7 +30,7 @@ func (s *Server) handleListChanges(w http.ResponseWriter, r *http.Request) {
 		esc = strings.ReplaceAll(esc, "%", "!%")
 		esc = strings.ReplaceAll(esc, "_", "!_")
 		like := "%" + esc + "%"
-		tx = tx.Where("change_number LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!'", like, like)
+		tx = tx.Where("(change_number LIKE ? ESCAPE '!' OR description LIKE ? ESCAPE '!')", like, like)
 	}
 
 	var total int64
