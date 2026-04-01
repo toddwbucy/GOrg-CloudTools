@@ -3,6 +3,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -45,10 +46,11 @@ func (or *OrgRunner) DryRun(ctx context.Context, env, parentID string) ([]string
 	return or.visitor.DryRun(ctx, env, parentID)
 }
 
-// Start discovers all accounts in the org (or OU), estimates the total
-// instance count via DryRun, creates an ExecutionBatch, and begins async execution.
+// Start discovers all accounts in the org (or OU) via DryRun, creates an
+// ExecutionBatch, and begins async execution. TotalInstances starts at 0 and
+// increments per region as instances are discovered.
 // Returns the batch ID for polling.
-func (or *OrgRunner) Start(ctx context.Context, baseCfg aws.Config, req OrgRequest) (uint, error) {
+func (or *OrgRunner) Start(ctx context.Context, req OrgRequest) (uint, error) {
 	// Resolve the script first so we fail fast before touching AWS.
 	runner := &Runner{db: or.db, maxConc: 10, timeoutSecs: or.timeoutSecs}
 	script, err := runner.resolveScript(ScriptRequest{
@@ -59,16 +61,15 @@ func (or *OrgRunner) Start(ctx context.Context, baseCfg aws.Config, req OrgReque
 		return 0, err
 	}
 
-	// DryRun to get scope without assuming any roles yet.
-	accounts, _, err := or.visitor.DryRun(ctx, req.Env, req.ParentID)
-	if err != nil {
+	// DryRun validates scope and fails fast without assuming any roles.
+	if _, _, err := or.visitor.DryRun(ctx, req.Env, req.ParentID); err != nil {
 		return 0, fmt.Errorf("org dry-run: %w", err)
 	}
 
-	// Use account count as a proxy for total_instances (updated as we discover instances).
+	// TotalInstances starts at 0 and is incremented as regions report real counts.
 	batch := &models.ExecutionBatch{
 		ScriptID:       script.ID,
-		TotalInstances: len(accounts),
+		TotalInstances: 0,
 		Status:         models.BatchStatusPending,
 		SessionID:      req.SessionID,
 	}
@@ -76,13 +77,12 @@ func (or *OrgRunner) Start(ctx context.Context, baseCfg aws.Config, req OrgReque
 		return 0, fmt.Errorf("creating org batch: %w", err)
 	}
 
-	go or.run(context.Background(), baseCfg, batch.ID, script, req)
+	go or.run(context.Background(), batch.ID, script, req)
 	return batch.ID, nil
 }
 
 func (or *OrgRunner) run(
 	ctx context.Context,
-	_ aws.Config, // base cfg is embedded in the visitor
 	batchID uint,
 	script *models.Script,
 	req OrgRequest,
@@ -143,58 +143,75 @@ func (or *OrgRunner) execInRegion(
 		return nil
 	}
 
-	// Adjust TotalInstances now that we know the real count.
+	// Increment TotalInstances by the actual number of targets in this region.
 	or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-		UpdateColumn("total_instances", gorm.Expr("total_instances + ?", len(targets)-1))
+		UpdateColumn("total_instances", gorm.Expr("total_instances + ?", len(targets)))
 
 	executor := ssm.New(cfg, or.timeoutSecs)
+
+	const maxConcPerRegion = 10
+	sem := make(chan struct{}, maxConcPerRegion)
+	var wg sync.WaitGroup
+
 	for _, iid := range targets {
-		now := time.Now()
-		exec := &models.Execution{
-			ScriptID:     script.ID,
-			BatchID:      &batchID,
-			InstanceID:   iid,
-			AccountID:    accountID,
-			Region:       region,
-			Status:       models.ExecutionStatusRunning,
-			StartTime:    now,
-			ChangeNumber: req.ChangeNumber,
-		}
-		or.db.Create(exec)
+		wg.Add(1)
+		go func(instanceID string) {
+			defer wg.Done()
+			sem <- struct{}{}
+			defer func() { <-sem }()
 
-		// Send first so commandID is persisted before we block.
-		commandID, err := executor.Send(ctx, []string{iid}, script.Content, platform)
-		if err != nil {
-			exec.Status = models.ExecutionStatusFailed
-			exec.Error = err.Error()
-			or.db.Save(exec)
-			or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-				UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
-			continue
-		}
-		exec.CommandID = commandID
-		or.db.Save(exec) // persist commandID before blocking
+			now := time.Now()
+			ex := &models.Execution{
+				ScriptID:     script.ID,
+				BatchID:      &batchID,
+				InstanceID:   instanceID,
+				AccountID:    accountID,
+				Region:       region,
+				Status:       models.ExecutionStatusRunning,
+				StartTime:    now,
+				ChangeNumber: req.ChangeNumber,
+			}
+			if err := or.db.Create(ex).Error; err != nil {
+				or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+					UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+				return
+			}
 
-		result, err := executor.WaitForDone(ctx, commandID, iid)
-		endTime := time.Now()
-		exec.EndTime = &endTime
+			// Send first so commandID is persisted before we block.
+			commandID, err := executor.Send(ctx, []string{instanceID}, script.Content, platform)
+			if err != nil {
+				ex.Status = models.ExecutionStatusFailed
+				ex.Error = err.Error()
+				or.db.Save(ex)
+				or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+					UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+				return
+			}
+			ex.CommandID = commandID
+			or.db.Save(ex) // persist commandID before blocking
 
-		if err != nil {
-			exec.Status = models.ExecutionStatusFailed
-			exec.Error = err.Error()
-			or.db.Save(exec)
-			or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-				UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
-		} else {
-			exitCode := result.ExitCode
-			exec.Status = models.ExecutionStatus(result.Status)
-			exec.Output = result.Output
-			exec.Error = result.Error
-			exec.ExitCode = &exitCode
-			or.db.Save(exec)
-			or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
-				UpdateColumn("completed_instances", gorm.Expr("completed_instances + 1"))
-		}
+			result, err := executor.WaitForDone(ctx, commandID, instanceID)
+			endTime := time.Now()
+			ex.EndTime = &endTime
+
+			if err != nil {
+				ex.Status = models.ExecutionStatusFailed
+				ex.Error = err.Error()
+				or.db.Save(ex)
+				or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+					UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+			} else {
+				exitCode := result.ExitCode
+				ex.Status = models.ExecutionStatus(result.Status)
+				ex.Output = result.Output
+				ex.Error = result.Error
+				ex.ExitCode = &exitCode
+				or.db.Save(ex)
+				or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+					UpdateColumn("completed_instances", gorm.Expr("completed_instances + 1"))
+			}
+		}(iid)
 	}
+	wg.Wait()
 	return nil
 }

@@ -101,19 +101,31 @@ func parseRateLimitSpec(spec string) (rate.Limit, int) {
 	return rate.Every(period / time.Duration(n)), n
 }
 
-// realIP extracts the client's real IP from X-Forwarded-For or RemoteAddr.
+// realIP returns the client IP. X-Forwarded-For / X-Real-IP are only trusted
+// when the immediate peer is a loopback or RFC-1918 private address (i.e. a
+// local load balancer or reverse proxy), preventing external IP spoofing.
 func realIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
-			return ip
+	peer, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if isPrivateOrLoopback(peer) {
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			if ip := strings.TrimSpace(strings.SplitN(xff, ",", 2)[0]); ip != "" {
+				return ip
+			}
+		}
+		if xri := r.Header.Get("X-Real-IP"); xri != "" {
+			return xri
 		}
 	}
-	if xri := r.Header.Get("X-Real-IP"); xri != "" {
-		return xri
+	if peer != "" {
+		return peer
 	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		return r.RemoteAddr
+	return r.RemoteAddr
+}
+
+func isPrivateOrLoopback(ip string) bool {
+	parsed := net.ParseIP(ip)
+	if parsed == nil {
+		return false
 	}
-	return ip
+	return parsed.IsLoopback() || parsed.IsPrivate()
 }

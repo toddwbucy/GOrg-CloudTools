@@ -63,50 +63,59 @@ func Describe(ctx context.Context, cfg aws.Config, accountID string, vpcIDs []st
 
 	snap := &Snapshot{AccountID: accountID, Region: cfg.Region}
 
-	// VPCs
-	vpcsOut, err := client.DescribeVpcs(ctx, &ec2.DescribeVpcsInput{Filters: vpcFilter})
-	if err != nil {
-		return nil, fmt.Errorf("DescribeVpcs (%s/%s): %w", accountID, cfg.Region, err)
-	}
-	for _, v := range vpcsOut.Vpcs {
-		snap.VPCs = append(snap.VPCs, VPC{
-			ID:        aws.ToString(v.VpcId),
-			CIDRBlock: aws.ToString(v.CidrBlock),
-			IsDefault: aws.ToBool(v.IsDefault),
-			State:     string(v.State),
-			Tags:      tagsToMap(v.Tags),
-		})
-	}
-
-	// Subnets
-	subnetsOut, err := client.DescribeSubnets(ctx, &ec2.DescribeSubnetsInput{Filters: vpcFilter})
-	if err != nil {
-		return nil, fmt.Errorf("DescribeSubnets (%s/%s): %w", accountID, cfg.Region, err)
-	}
-	for _, s := range subnetsOut.Subnets {
-		snap.Subnets = append(snap.Subnets, Subnet{
-			ID:               aws.ToString(s.SubnetId),
-			VPCID:            aws.ToString(s.VpcId),
-			CIDRBlock:        aws.ToString(s.CidrBlock),
-			AvailabilityZone: aws.ToString(s.AvailabilityZone),
-			AvailableIPs:     aws.ToInt32(s.AvailableIpAddressCount),
-			Tags:             tagsToMap(s.Tags),
-		})
+	// VPCs — paginated
+	vpcPager := ec2.NewDescribeVpcsPaginator(client, &ec2.DescribeVpcsInput{Filters: vpcFilter})
+	for vpcPager.HasMorePages() {
+		page, err := vpcPager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("DescribeVpcs (%s/%s): %w", accountID, cfg.Region, err)
+		}
+		for _, v := range page.Vpcs {
+			snap.VPCs = append(snap.VPCs, VPC{
+				ID:        aws.ToString(v.VpcId),
+				CIDRBlock: aws.ToString(v.CidrBlock),
+				IsDefault: aws.ToBool(v.IsDefault),
+				State:     string(v.State),
+				Tags:      tagsToMap(v.Tags),
+			})
+		}
 	}
 
-	// Security groups
-	sgsOut, err := client.DescribeSecurityGroups(ctx, &ec2.DescribeSecurityGroupsInput{Filters: vpcFilter})
-	if err != nil {
-		return nil, fmt.Errorf("DescribeSecurityGroups (%s/%s): %w", accountID, cfg.Region, err)
+	// Subnets — paginated
+	subnetPager := ec2.NewDescribeSubnetsPaginator(client, &ec2.DescribeSubnetsInput{Filters: vpcFilter})
+	for subnetPager.HasMorePages() {
+		page, err := subnetPager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("DescribeSubnets (%s/%s): %w", accountID, cfg.Region, err)
+		}
+		for _, s := range page.Subnets {
+			snap.Subnets = append(snap.Subnets, Subnet{
+				ID:               aws.ToString(s.SubnetId),
+				VPCID:            aws.ToString(s.VpcId),
+				CIDRBlock:        aws.ToString(s.CidrBlock),
+				AvailabilityZone: aws.ToString(s.AvailabilityZone),
+				AvailableIPs:     aws.ToInt32(s.AvailableIpAddressCount),
+				Tags:             tagsToMap(s.Tags),
+			})
+		}
 	}
-	for _, sg := range sgsOut.SecurityGroups {
-		snap.SecurityGroups = append(snap.SecurityGroups, SecurityGroup{
-			ID:          aws.ToString(sg.GroupId),
-			VPCID:       aws.ToString(sg.VpcId),
-			Name:        aws.ToString(sg.GroupName),
-			Description: aws.ToString(sg.Description),
-			Tags:        tagsToMap(sg.Tags),
-		})
+
+	// Security groups — paginated
+	sgPager := ec2.NewDescribeSecurityGroupsPaginator(client, &ec2.DescribeSecurityGroupsInput{Filters: vpcFilter})
+	for sgPager.HasMorePages() {
+		page, err := sgPager.NextPage(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("DescribeSecurityGroups (%s/%s): %w", accountID, cfg.Region, err)
+		}
+		for _, sg := range page.SecurityGroups {
+			snap.SecurityGroups = append(snap.SecurityGroups, SecurityGroup{
+				ID:          aws.ToString(sg.GroupId),
+				VPCID:       aws.ToString(sg.VpcId),
+				Name:        aws.ToString(sg.GroupName),
+				Description: aws.ToString(sg.Description),
+				Tags:        tagsToMap(sg.Tags),
+			})
+		}
 	}
 
 	return snap, nil

@@ -21,22 +21,23 @@ import (
 // Server is the root HTTP handler. It owns all shared resources and registers
 // routes on construction.
 type Server struct {
-	cfg       *config.Config
-	db        *gorm.DB
-	mux       *http.ServeMux
-	ses       *middleware.SessionConfig
-	orgRunner *exec.OrgRunner // nil if management credentials are not configured
+	cfg        *config.Config
+	db         *gorm.DB
+	mux        *http.ServeMux
+	ses        *middleware.SessionConfig
+	orgRunners map[string]*exec.OrgRunner // keyed by env ("com", "gov"); nil entry → 503
 }
 
 // NewServer builds the fully wired HTTP handler.
-// orgRunner may be nil; org-scoped endpoints return 503 in that case.
-func NewServer(cfg *config.Config, db *gorm.DB, orgRunner *exec.OrgRunner) http.Handler {
+// orgRunners maps each AWS environment to its OrgRunner; a missing or nil entry
+// causes org-scoped endpoints for that environment to return 503.
+func NewServer(cfg *config.Config, db *gorm.DB, orgRunners map[string]*exec.OrgRunner) http.Handler {
 	s := &Server{
-		cfg:       cfg,
-		db:        db,
-		mux:       http.NewServeMux(),
-		ses:       middleware.NewSessionConfig(cfg.SecretKey, cfg.SessionLifetimeMinutes, cfg.Environment == "production"),
-		orgRunner: orgRunner,
+		cfg:        cfg,
+		db:         db,
+		mux:        http.NewServeMux(),
+		ses:        middleware.NewSessionConfig(cfg.SecretKey, cfg.SessionLifetimeMinutes, cfg.Environment == "production"),
+		orgRunners: orgRunners,
 	}
 	s.registerRoutes()
 
@@ -85,23 +86,23 @@ func (s *Server) registerRoutes() {
 
 	// ── Execution sessions ────────────────────────────────────────────────────
 	s.mux.HandleFunc("POST /api/sessions", s.handleCreateSession)
-	s.mux.Handle("GET /api/sessions/",
+	s.mux.Handle("GET /api/sessions/{$}",
 		readRL.Wrap(http.HandlerFunc(s.handleListSessions)))
 	s.mux.Handle("GET /api/sessions/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetSession)))
 	s.mux.HandleFunc("PATCH /api/sessions/{id}/status", s.handleUpdateSessionStatus)
 
 	// ── Script library ────────────────────────────────────────────────────────
-	s.mux.Handle("GET /api/scripts/",
+	s.mux.Handle("GET /api/scripts/{$}",
 		readRL.Wrap(http.HandlerFunc(s.handleListScripts)))
 	s.mux.Handle("GET /api/scripts/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetScript)))
-	s.mux.HandleFunc("POST /api/scripts/", s.handleCreateScript)
+	s.mux.HandleFunc("POST /api/scripts/{$}", s.handleCreateScript)
 	s.mux.HandleFunc("PUT /api/scripts/{id}", s.handleUpdateScript)
 	s.mux.HandleFunc("DELETE /api/scripts/{id}", s.handleDeleteScript)
 
 	// ── Tool library ──────────────────────────────────────────────────────────
-	s.mux.Handle("GET /api/tools/",
+	s.mux.Handle("GET /api/tools/{$}",
 		readRL.Wrap(http.HandlerFunc(s.handleListTools)))
 	s.mux.Handle("GET /api/tools/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetTool)))

@@ -78,6 +78,8 @@ func (s *Server) handleExecScript(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleExecOrgScript runs a script across every matching instance in the org.
+// The OrgRunner uses its own server-side management credentials; the user session
+// is checked only for authentication (not forwarded to the runner).
 func (s *Server) handleExecOrgScript(w http.ResponseWriter, r *http.Request) {
 	var req execOrgRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,18 +96,18 @@ func (s *Server) handleExecOrgScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := middleware.GetSession(r)
-	cfg, _, err := awscreds.FromSession(r.Context(), sess)
-	if err != nil {
-		jsonError(w, "no valid AWS credentials in session", http.StatusUnauthorized)
+	if !sess.HasAWSCredentials(req.Env) {
+		jsonError(w, "no valid AWS credentials in session for env "+req.Env, http.StatusUnauthorized)
 		return
 	}
 
-	if s.orgRunner == nil {
-		jsonError(w, "org execution is not configured (management credentials required)", http.StatusServiceUnavailable)
+	runner := s.orgRunners[req.Env]
+	if runner == nil {
+		jsonError(w, "org execution is not configured for env "+req.Env+" (management credentials required)", http.StatusServiceUnavailable)
 		return
 	}
 
-	jobID, err := s.orgRunner.Start(r.Context(), cfg, exec.OrgRequest{
+	jobID, err := runner.Start(r.Context(), exec.OrgRequest{
 		ScriptID:     req.ScriptID,
 		InlineScript: req.InlineScript,
 		Platform:     req.Platform,

@@ -27,7 +27,11 @@ func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
 		tx = tx.Where("script_type = ?", scriptType)
 	}
 	if isTemplateStr != "" {
-		b, _ := strconv.ParseBool(isTemplateStr)
+		b, err := strconv.ParseBool(isTemplateStr)
+		if err != nil {
+			jsonError(w, "is_template must be a boolean (true/false/1/0)", http.StatusBadRequest)
+			return
+		}
 		tx = tx.Where("is_template = ?", b)
 	}
 
@@ -86,16 +90,54 @@ func (s *Server) handleCreateScript(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateScript(w http.ResponseWriter, r *http.Request) {
 	var existing models.Script
 	if err := s.db.First(&existing, r.PathValue("id")).Error; err != nil {
-		jsonError(w, "script not found", http.StatusNotFound)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			jsonError(w, "script not found", http.StatusNotFound)
+		} else {
+			jsonError(w, "database error", http.StatusInternalServerError)
+		}
 		return
 	}
-	var updates models.Script
-	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+	// Pointer fields so callers can explicitly set zero values (e.g. is_template=false).
+	var patch struct {
+		Name        *string `json:"name"`
+		Content     *string `json:"content"`
+		Description *string `json:"description"`
+		ScriptType  *string `json:"script_type"`
+		Interpreter *string `json:"interpreter"`
+		IsTemplate  *bool   `json:"is_template"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if err := s.db.Model(&existing).Updates(updates).Error; err != nil {
-		jsonError(w, "failed to update script", http.StatusInternalServerError)
+	updates := map[string]any{}
+	if patch.Name != nil {
+		updates["name"] = *patch.Name
+	}
+	if patch.Content != nil {
+		updates["content"] = *patch.Content
+	}
+	if patch.Description != nil {
+		updates["description"] = *patch.Description
+	}
+	if patch.ScriptType != nil {
+		updates["script_type"] = *patch.ScriptType
+	}
+	if patch.Interpreter != nil {
+		updates["interpreter"] = *patch.Interpreter
+	}
+	if patch.IsTemplate != nil {
+		updates["is_template"] = *patch.IsTemplate
+	}
+	if len(updates) > 0 {
+		if err := s.db.Model(&existing).Updates(updates).Error; err != nil {
+			jsonError(w, "failed to update script", http.StatusInternalServerError)
+			return
+		}
+	}
+	// Reload to return the persisted state, including any DB-level defaults.
+	if err := s.db.First(&existing, existing.ID).Error; err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
 		return
 	}
 	jsonOK(w, existing)

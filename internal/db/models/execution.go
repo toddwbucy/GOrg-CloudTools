@@ -22,15 +22,16 @@ type Execution struct {
 	Script    Script `gorm:"foreignKey:ScriptID" json:"-"`
 
 	InstanceID   string          `gorm:"index:idx_exec_instance_status;not null" json:"instance_id"`
-	AccountID    string          `gorm:"" json:"account_id"`
-	Region       string          `gorm:"" json:"region"`
+	AccountID    string          `gorm:"index:idx_exec_command_lookup" json:"account_id"`
+	Region       string          `gorm:"index:idx_exec_command_lookup" json:"region"`
 	Status       ExecutionStatus `gorm:"not null;default:pending;index:idx_exec_batch_status;index:idx_exec_instance_status" json:"status"`
 	StartTime    time.Time       `gorm:"not null;autoCreateTime" json:"start_time"`
 	EndTime      *time.Time      `gorm:"" json:"end_time,omitempty"`
 	Output       string          `gorm:"type:text" json:"output"`
 	Error        string          `gorm:"type:text" json:"error"`
 	ExitCode     *int            `gorm:"" json:"exit_code,omitempty"`
-	CommandID    string  `gorm:"" json:"command_id"`    // SSM command ID
+	// CommandID is the SSM command ID; indexed for the universal status-poll endpoint.
+	CommandID    string  `gorm:"index:idx_exec_command_lookup" json:"command_id"`
 	BatchID      *uint   `gorm:"index:idx_exec_batch_status" json:"batch_id,omitempty"`
 	ChangeNumber string  `gorm:"" json:"change_number"`
 

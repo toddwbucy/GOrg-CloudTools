@@ -26,6 +26,7 @@ type Session struct {
 	AWSSecretAccessKey string    `json:"sak,omitempty"`
 	AWSSessionToken    string    `json:"st,omitempty"`
 	AWSEnvironment     string    `json:"env,omitempty"` // "com" or "gov"
+	AWSAccountID       string    `json:"aid,omitempty"` // account ID from STS GetCallerIdentity
 	CreatedAt          time.Time `json:"ca"`
 }
 
@@ -122,14 +123,18 @@ func SaveSession(w http.ResponseWriter, cfg *SessionConfig, sess *Session) error
 	return nil
 }
 
-// ClearSession deletes the session cookie.
-func ClearSession(w http.ResponseWriter) {
+// ClearSession deletes the session cookie. The cfg is used to match the
+// HttpOnly and Secure attributes of the original cookie so browsers reliably
+// remove it.
+func ClearSession(w http.ResponseWriter, cfg *SessionConfig) {
 	http.SetCookie(w, &http.Cookie{
-		Name:    "cloudopstools_session",
-		Value:   "",
-		MaxAge:  -1,
-		Path:    "/",
-		Expires: time.Unix(0, 0),
+		Name:     "cloudopstools_session",
+		Value:    "",
+		MaxAge:   -1,
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		HttpOnly: true,
+		Secure:   cfg.secure,
 	})
 }
 

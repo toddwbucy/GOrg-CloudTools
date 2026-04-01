@@ -24,7 +24,7 @@ type Region struct {
 // Instance represents an EC2 instance.
 type Instance struct {
 	gorm.Model
-	InstanceID string `gorm:"not null" json:"instance_id"`
+	InstanceID string `gorm:"not null;uniqueIndex" json:"instance_id"`
 	RegionID   uint   `gorm:"not null;index" json:"region_id"`
 	Region     Region `gorm:"foreignKey:RegionID" json:"-"`
 	Platform   string `gorm:"not null" json:"platform"` // "linux" or "windows"

@@ -37,11 +37,12 @@ func main() {
 		os.Exit(1)
 	}
 
-	// OrgRunner is optional: only available when server-side management credentials
-	// are configured. Per-account workflows use session credentials instead.
-	orgRunner := buildOrgRunner(cfg, database)
+	// OrgRunners are optional: one per AWS environment that has server-side
+	// management credentials configured. Per-account workflows always use
+	// session credentials; org-scoped endpoints return 503 for unconfigured envs.
+	orgRunners := buildOrgRunners(cfg, database)
 
-	srv := api.NewServer(cfg, database, orgRunner)
+	srv := api.NewServer(cfg, database, orgRunners)
 	addr := fmt.Sprintf("%s:%d", cfg.Host, cfg.Port)
 	httpSrv := &http.Server{
 		Addr:         addr,
@@ -72,10 +73,10 @@ func main() {
 	slog.Info("stopped")
 }
 
-// buildOrgRunner constructs an OrgRunner if server-side management credentials
-// are present in the environment. Returns nil if not configured — org-scoped
-// API endpoints will return 503 in that case.
-func buildOrgRunner(cfg *config.Config, database *gorm.DB) *exec.OrgRunner {
+// buildOrgRunners constructs an OrgRunner for each AWS environment that has
+// server-side management credentials configured. Environments without credentials
+// are omitted — org-scoped API endpoints return 503 for those envs.
+func buildOrgRunners(cfg *config.Config, database *gorm.DB) map[string]*exec.OrgRunner {
 	type envCreds struct {
 		env, region, keyID, secret, token string
 	}
@@ -84,6 +85,7 @@ func buildOrgRunner(cfg *config.Config, database *gorm.DB) *exec.OrgRunner {
 		{"gov", "us-gov-west-1", cfg.AWSAccessKeyIDGOV, cfg.AWSSecretAccessKeyGOV, cfg.AWSSessionTokenGOV},
 	}
 
+	runners := make(map[string]*exec.OrgRunner)
 	for _, c := range candidates {
 		if c.keyID == "" || c.secret == "" {
 			continue
@@ -102,10 +104,12 @@ func buildOrgRunner(cfg *config.Config, database *gorm.DB) *exec.OrgRunner {
 			gorgaws.WithConcurrency(20),
 			gorgaws.WithLogger(slog.Default()),
 		)
+		runners[c.env] = exec.NewOrgRunner(database, visitor, cfg.ExecutionTimeoutSecs)
 		slog.Info("org runner initialised", "env", c.env)
-		return exec.NewOrgRunner(database, visitor, cfg.ExecutionTimeoutSecs)
 	}
 
-	slog.Info("no server-side management credentials configured; org execution disabled")
-	return nil
+	if len(runners) == 0 {
+		slog.Info("no server-side management credentials configured; org execution disabled")
+	}
+	return runners
 }

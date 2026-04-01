@@ -38,7 +38,11 @@ type Runner struct {
 }
 
 // New creates a Runner. maxConcurrent limits simultaneous SSM invocations.
+// A non-positive value is clamped to 1 to avoid semaphore deadlock.
 func New(db *gorm.DB, maxConcurrent, timeoutSecs int) *Runner {
+	if maxConcurrent <= 0 {
+		maxConcurrent = 1
+	}
 	return &Runner{db: db, maxConc: maxConcurrent, timeoutSecs: timeoutSecs}
 }
 
@@ -175,12 +179,17 @@ func (r *Runner) resolveScript(req ScriptRequest) (*models.Script, error) {
 		return &s, nil
 	}
 	if req.InlineScript != "" {
-		return &models.Script{
-			Name:       "_inline",
-			Content:    req.InlineScript,
-			ScriptType: "bash",
+		// Persist so the script gets a real ID, which is required by the ExecutionBatch FK.
+		s := &models.Script{
+			Name:        "_inline",
+			Content:     req.InlineScript,
+			ScriptType:  "bash",
 			Interpreter: "bash",
-		}, nil
+		}
+		if err := r.db.Create(s).Error; err != nil {
+			return nil, fmt.Errorf("persisting inline script: %w", err)
+		}
+		return s, nil
 	}
 	return nil, fmt.Errorf("one of script_id or inline_script is required")
 }

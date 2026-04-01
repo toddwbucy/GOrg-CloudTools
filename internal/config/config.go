@@ -3,6 +3,7 @@ package config
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"os"
@@ -145,7 +146,14 @@ func getCORSOrigins() []string {
 	if v == "" {
 		return []string{"http://localhost:8500", "http://localhost:3000"}
 	}
-	v = strings.TrimPrefix(strings.TrimSuffix(v, "]"), "[")
+	// Try JSON array first (e.g. '["https://app.example.com","https://admin.example.com"]').
+	if strings.HasPrefix(v, "[") {
+		var origins []string
+		if err := json.Unmarshal([]byte(v), &origins); err == nil {
+			return origins
+		}
+	}
+	// Fall back to comma-separated list.
 	parts := strings.Split(v, ",")
 	result := make([]string, 0, len(parts))
 	for _, p := range parts {

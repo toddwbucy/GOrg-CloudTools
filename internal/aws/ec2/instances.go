@@ -41,10 +41,14 @@ func ListRunning(ctx context.Context, cfg aws.Config, accountID string) ([]Insta
 		}
 		for _, res := range page.Reservations {
 			for _, inst := range res.Instances {
+				var stateName string
+				if inst.State != nil {
+					stateName = string(inst.State.Name)
+				}
 				instances = append(instances, Instance{
 					InstanceID: aws.ToString(inst.InstanceId),
 					Platform:   normalizePlatform(inst.Platform),
-					State:      string(inst.State.Name),
+					State:      stateName,
 					Name:       nameTag(inst.Tags),
 					AccountID:  accountID,
 					Region:     cfg.Region,

@@ -82,15 +82,20 @@ func (e *Executor) GetStatus(ctx context.Context, commandID, instanceID string) 
 	if err != nil {
 		return nil, fmt.Errorf("GetCommandInvocation (%s/%s): %w", commandID, instanceID, err)
 	}
-	return &InvocationStatus{
+	done := isTerminal(out.Status)
+	is := &InvocationStatus{
 		CommandID:  commandID,
 		InstanceID: instanceID,
 		Status:     string(out.Status),
 		Output:     aws.ToString(out.StandardOutputContent),
 		Error:      aws.ToString(out.StandardErrorContent),
-		ExitCode:   int(out.ResponseCode),
-		Done:       isTerminal(out.Status),
-	}, nil
+		Done:       done,
+	}
+	// ExitCode is only meaningful once the command has reached a terminal state.
+	if done {
+		is.ExitCode = int(out.ResponseCode)
+	}
+	return is, nil
 }
 
 // Run is a convenience wrapper: Send + poll until terminal. Used internally

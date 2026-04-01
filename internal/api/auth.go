@@ -46,6 +46,7 @@ func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request)
 		sess.AWSSecretAccessKey = req.SecretAccessKey
 		sess.AWSSessionToken = req.SessionToken
 		sess.AWSEnvironment = req.Environment
+		sess.AWSAccountID = "dev-mode"
 		if err := middleware.SaveSession(w, s.ses, sess); err != nil {
 			jsonError(w, "failed to save session", http.StatusInternalServerError)
 			return
@@ -93,6 +94,7 @@ func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request)
 	sess.AWSSecretAccessKey = req.SecretAccessKey
 	sess.AWSSessionToken = req.SessionToken
 	sess.AWSEnvironment = req.Environment
+	sess.AWSAccountID = aws.ToString(identity.Account)
 	if err := middleware.SaveSession(w, s.ses, sess); err != nil {
 		jsonError(w, "failed to save session", http.StatusInternalServerError)
 		return
@@ -120,7 +122,7 @@ func (s *Server) handleGetCredentials(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteCredentials(w http.ResponseWriter, r *http.Request) {
-	middleware.ClearSession(w)
+	middleware.ClearSession(w, s.ses)
 	jsonOK(w, map[string]string{"status": "ok"})
 }
 

@@ -5,7 +5,6 @@ import (
 	"errors"
 	"net/http"
 
-	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
 )
@@ -26,17 +25,11 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sess := middleware.GetSession(r)
-	accountID := req.AccountID
-	if accountID == "" {
-		accountID = sess.AWSEnvironment // best effort
-	}
-
 	session := &models.ExecutionSession{
 		WorkflowType: req.WorkflowType,
 		Description:  req.Description,
 		Status:       "in_progress",
-		AccountID:    accountID,
+		AccountID:    req.AccountID,
 		Env:          req.Env,
 	}
 	if err := s.db.Create(session).Error; err != nil {
@@ -80,10 +73,15 @@ func (s *Server) handleUpdateSessionStatus(w http.ResponseWriter, r *http.Reques
 		jsonError(w, "status must be one of: in_progress, completed, failed, cancelled", http.StatusBadRequest)
 		return
 	}
-	if err := s.db.Model(&models.ExecutionSession{}).
+	res := s.db.Model(&models.ExecutionSession{}).
 		Where("id = ?", r.PathValue("id")).
-		Update("status", body.Status).Error; err != nil {
+		Update("status", body.Status)
+	if res.Error != nil {
 		jsonError(w, "failed to update session", http.StatusInternalServerError)
+		return
+	}
+	if res.RowsAffected == 0 {
+		jsonError(w, "session not found", http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

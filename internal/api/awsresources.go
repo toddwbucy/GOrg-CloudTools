@@ -93,12 +93,13 @@ func (s *Server) handleOrgAccounts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.orgRunner == nil {
-		jsonError(w, "org access is not configured (management credentials required)", http.StatusServiceUnavailable)
+	runner := s.orgRunners[env]
+	if runner == nil {
+		jsonError(w, "org access is not configured for env "+env+" (management credentials required)", http.StatusServiceUnavailable)
 		return
 	}
 
-	accounts, regions, err := s.orgRunner.DryRun(r.Context(), env, parentID)
+	accounts, regions, err := runner.DryRun(r.Context(), env, parentID)
 	if err != nil {
 		jsonError(w, "org dry-run failed: "+err.Error(), http.StatusBadGateway)
 		return
