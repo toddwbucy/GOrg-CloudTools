@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
@@ -103,9 +102,7 @@ func (s *Server) handleCreateChange(w http.ResponseWriter, r *http.Request) {
 		ChangeMetadata: body.ChangeMetadata,
 	}
 	if err := s.db.Create(&change).Error; err != nil {
-		// SQLite UNIQUE constraint failures contain this substring; return 409
-		// so callers can distinguish a duplicate change_number from a server fault.
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		if errors.Is(err, gorm.ErrDuplicatedKey) {
 			jsonError(w, "change_number already exists", http.StatusConflict)
 			return
 		}
@@ -150,12 +147,12 @@ func (s *Server) handleUpdateChange(w http.ResponseWriter, r *http.Request) {
 		updates["description"] = *patch.Description
 	}
 	if patch.Status != nil {
-		s := models.ChangeStatus(*patch.Status)
-		if !validChangeStatus(s) {
+		newStatus := models.ChangeStatus(*patch.Status)
+		if !validChangeStatus(newStatus) {
 			jsonError(w, "status must be one of: new, approved, completed", http.StatusBadRequest)
 			return
 		}
-		updates["status"] = s
+		updates["status"] = newStatus
 	}
 	if len(patch.ChangeMetadata) > 0 {
 		// json.RawMessage("null") has len=4, so the length check alone does not

@@ -21,7 +21,8 @@ import (
 func newChangeTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
 	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger: gormlogger.Default.LogMode(gormlogger.Silent),
+		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
+		TranslateError: true,
 	})
 	if err != nil {
 		t.Fatalf("open test db: %v", err)
