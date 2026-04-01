@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
@@ -82,6 +83,7 @@ func (s *Server) handleCreateChange(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
+	body.ChangeNumber = strings.TrimSpace(body.ChangeNumber)
 	if body.ChangeNumber == "" {
 		jsonError(w, "change_number is required", http.StatusBadRequest)
 		return
@@ -133,12 +135,17 @@ func (s *Server) handleUpdateChange(w http.ResponseWriter, r *http.Request) {
 	// json.RawMessage distinguishes "field absent" (nil) from "field present
 	// as null" so we do not accidentally clear metadata on a status-only PATCH.
 	var patch struct {
+		ChangeNumber   *string         `json:"change_number"`
 		Description    *string         `json:"description"`
 		Status         *string         `json:"status"`
 		ChangeMetadata json.RawMessage `json:"change_metadata"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&patch); err != nil {
 		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if patch.ChangeNumber != nil {
+		jsonError(w, "change_number is immutable", http.StatusBadRequest)
 		return
 	}
 
