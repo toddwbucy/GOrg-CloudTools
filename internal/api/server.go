@@ -102,6 +102,14 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("PATCH /api/scripts/{id}", s.handleUpdateScript)
 	s.mux.HandleFunc("DELETE /api/scripts/{id}", s.handleDeleteScript)
 
+	// ── Change management ─────────────────────────────────────────────────────
+	s.mux.Handle("GET /api/changes/{$}",
+		readRL.Wrap(http.HandlerFunc(s.handleListChanges)))
+	s.mux.Handle("GET /api/changes/{id}",
+		readRL.Wrap(http.HandlerFunc(s.handleGetChange)))
+	s.mux.HandleFunc("POST /api/changes/{$}", s.handleCreateChange)
+	s.mux.HandleFunc("PATCH /api/changes/{id}", s.handleUpdateChange)
+
 	// ── Tool library ──────────────────────────────────────────────────────────
 	s.mux.Handle("GET /api/tools/{$}",
 		readRL.Wrap(http.HandlerFunc(s.handleListTools)))
