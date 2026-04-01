@@ -49,9 +49,10 @@ func NewServer(cfg *config.Config, db *gorm.DB, orgRunners map[string]*exec.OrgR
 }
 
 func (s *Server) registerRoutes() {
-	authRL := middleware.NewRateLimiter(s.cfg.RateLimitAuth)
-	readRL := middleware.NewRateLimiter(s.cfg.RateLimitRead)
-	execRL := middleware.NewRateLimiter(s.cfg.RateLimitExecution)
+	authRL  := middleware.NewRateLimiter(s.cfg.RateLimitAuth)
+	readRL  := middleware.NewRateLimiter(s.cfg.RateLimitRead)
+	execRL  := middleware.NewRateLimiter(s.cfg.RateLimitExecution)
+	writeRL := middleware.NewRateLimiter(s.cfg.RateLimitWrite)
 
 	// ── Health ────────────────────────────────────────────────────────────────
 	s.mux.HandleFunc("GET /health", s.handleHealth)
@@ -101,6 +102,16 @@ func (s *Server) registerRoutes() {
 	s.mux.HandleFunc("POST /api/scripts/{$}", s.handleCreateScript)
 	s.mux.HandleFunc("PATCH /api/scripts/{id}", s.handleUpdateScript)
 	s.mux.HandleFunc("DELETE /api/scripts/{id}", s.handleDeleteScript)
+
+	// ── Change management ─────────────────────────────────────────────────────
+	s.mux.Handle("GET /api/changes/{$}",
+		readRL.Wrap(http.HandlerFunc(s.handleListChanges)))
+	s.mux.Handle("GET /api/changes/{id}",
+		readRL.Wrap(http.HandlerFunc(s.handleGetChange)))
+	s.mux.Handle("POST /api/changes/{$}",
+		writeRL.Wrap(http.HandlerFunc(s.handleCreateChange)))
+	s.mux.Handle("PATCH /api/changes/{id}",
+		writeRL.Wrap(http.HandlerFunc(s.handleUpdateChange)))
 
 	// ── Tool library ──────────────────────────────────────────────────────────
 	s.mux.Handle("GET /api/tools/{$}",
