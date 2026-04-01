@@ -8,6 +8,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -99,17 +100,23 @@ func (r *Runner) run(
 	}
 
 	executor := ssm.New(cfg, r.timeoutSecs)
-	sem := make(chan struct{}, r.maxConc)
-	var wg sync.WaitGroup
 
+	instancesCh := make(chan string, len(instanceIDs))
 	for _, iid := range instanceIDs {
+		instancesCh <- iid
+	}
+	close(instancesCh)
+
+	var wg sync.WaitGroup
+	workerCount := min(r.maxConc, len(instanceIDs))
+	for range workerCount {
 		wg.Add(1)
-		go func(instanceID string) {
+		go func() {
 			defer wg.Done()
-			sem <- struct{}{}
-			defer func() { <-sem }()
-			r.runOne(ctx, executor, batchID, script, instanceID, platform, req)
-		}(iid)
+			for instanceID := range instancesCh {
+				r.runOne(ctx, executor, batchID, script, instanceID, platform, req)
+			}
+		}()
 	}
 	wg.Wait()
 
@@ -234,12 +241,20 @@ func (r *Runner) resolveScript(req ScriptRequest) (*models.Script, error) {
 		return &s, nil
 	}
 	if req.InlineScript != "" {
-		// Persist so the script gets a real ID, which is required by the ExecutionBatch FK.
+		scriptType := "bash"
+		interpreter := "bash"
+		if strings.EqualFold(req.Platform, "windows") {
+			scriptType = "powershell"
+			interpreter = "powershell"
+		}
+		// Persist so the script gets a real ID, required by the ExecutionBatch FK.
+		// Marked Ephemeral so it is excluded from the public scripts API.
 		s := &models.Script{
 			Name:        "_inline",
 			Content:     req.InlineScript,
-			ScriptType:  "bash",
-			Interpreter: "bash",
+			ScriptType:  scriptType,
+			Interpreter: interpreter,
+			Ephemeral:   true,
 		}
 		if err := r.db.Create(s).Error; err != nil {
 			return nil, fmt.Errorf("persisting inline script: %w", err)

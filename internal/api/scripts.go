@@ -18,7 +18,8 @@ func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
 	scriptType := q.Get("script_type")
 	isTemplateStr := q.Get("is_template")
 
-	tx := s.db.Model(&models.Script{})
+	// Exclude ephemeral scripts (created from inline executions) from the catalog.
+	tx := s.db.Model(&models.Script{}).Where("ephemeral = ?", false)
 	if search != "" {
 		like := "%" + search + "%"
 		tx = tx.Where("name LIKE ? OR description LIKE ?", like, like)
@@ -36,7 +37,10 @@ func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var total int64
-	tx.Count(&total)
+	if err := tx.Count(&total).Error; err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
 
 	var scripts []models.Script
 	if err := tx.Offset((page - 1) * pageSize).Limit(pageSize).Find(&scripts).Error; err != nil {
@@ -54,7 +58,7 @@ func (s *Server) handleListScripts(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetScript(w http.ResponseWriter, r *http.Request) {
 	var script models.Script
-	if err := s.db.First(&script, r.PathValue("id")).Error; err != nil {
+	if err := s.db.Where("ephemeral = ?", false).First(&script, r.PathValue("id")).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			jsonError(w, "script not found", http.StatusNotFound)
 		} else {
@@ -106,7 +110,7 @@ func (s *Server) handleCreateScript(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleUpdateScript(w http.ResponseWriter, r *http.Request) {
 	var existing models.Script
-	if err := s.db.First(&existing, r.PathValue("id")).Error; err != nil {
+	if err := s.db.Where("ephemeral = ?", false).First(&existing, r.PathValue("id")).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			jsonError(w, "script not found", http.StatusNotFound)
 		} else {
@@ -177,7 +181,7 @@ func (s *Server) handleUpdateScript(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteScript(w http.ResponseWriter, r *http.Request) {
-	res := s.db.Delete(&models.Script{}, r.PathValue("id"))
+	res := s.db.Where("ephemeral = ?", false).Delete(&models.Script{}, r.PathValue("id"))
 	if res.Error != nil {
 		jsonError(w, "failed to delete script", http.StatusInternalServerError)
 		return

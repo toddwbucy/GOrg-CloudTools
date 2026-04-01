@@ -52,10 +52,14 @@ type Config struct {
 // In development, a random SECRET_KEY is generated if one is not provided.
 // In production, SECRET_KEY must be set and at least 32 characters.
 func Load() (*Config, error) {
+	// Trim environment early so all downstream checks (EqualFold, getCORSOrigins,
+	// isProd) use the same clean value regardless of accidental whitespace.
+	env := strings.TrimSpace(getEnv("ENVIRONMENT", "development"))
+
 	cfg := &Config{
 		AppName:                 getEnv("APP_NAME", "CloudOpsTools"),
 		Version:                 getEnv("VERSION", "2.0.0"),
-		Environment:             getEnv("ENVIRONMENT", "development"),
+		Environment:             env,
 		Debug:                   getBoolEnv("DEBUG", false),
 		DevMode:                 getBoolEnv("DEV_MODE", false),
 		SecretKey:               strings.TrimSpace(os.Getenv("SECRET_KEY")),
@@ -63,7 +67,7 @@ func Load() (*Config, error) {
 		Host:                    getEnv("HOST", "0.0.0.0"),
 		Port:                    getIntEnv("PORT", 8500),
 		StaticDir:               getEnv("STATIC_DIR", "./static"),
-		CORSOrigins:             getCORSOrigins(getEnv("ENVIRONMENT", "development")),
+		CORSOrigins:             getCORSOrigins(env),
 		AWSDefaultRegion:        getEnv("AWS_DEFAULT_REGION", "us-east-1"),
 		AWSAccessKeyIDCOM:       os.Getenv("AWS_ACCESS_KEY_ID_COM"),
 		AWSSecretAccessKeyCOM:   os.Getenv("AWS_SECRET_ACCESS_KEY_COM"),

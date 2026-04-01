@@ -11,6 +11,9 @@ type Script struct {
 	ScriptType  string  `gorm:"not null" json:"script_type"`        // "bash", "powershell"
 	Interpreter string  `gorm:"not null;default:bash" json:"interpreter"`
 	IsTemplate  bool    `gorm:"default:false" json:"is_template"`
+	// Ephemeral marks scripts created from inline requests. These are excluded
+	// from the public scripts API so they don't pollute the script catalog.
+	Ephemeral   bool    `gorm:"not null;default:false;index" json:"-"`
 	ChangeID    *uint   `gorm:"index" json:"change_id,omitempty"`
 	ToolID      *uint   `gorm:"index" json:"tool_id,omitempty"`
 	Change      *Change `gorm:"foreignKey:ChangeID" json:"-"`
