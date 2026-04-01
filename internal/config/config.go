@@ -25,6 +25,7 @@ type Config struct {
 
 	Host        string
 	Port        int
+	StaticDir   string
 	CORSOrigins []string
 
 	AWSDefaultRegion      string
@@ -61,6 +62,7 @@ func Load() (*Config, error) {
 		DatabaseURL:             getEnv("DATABASE_URL", "./data/cloudopstools.db"),
 		Host:                    getEnv("HOST", "0.0.0.0"),
 		Port:                    getIntEnv("PORT", 8500),
+		StaticDir:               getEnv("STATIC_DIR", "./static"),
 		CORSOrigins:             getCORSOrigins(),
 		AWSDefaultRegion:        getEnv("AWS_DEFAULT_REGION", "us-east-1"),
 		AWSAccessKeyIDCOM:       os.Getenv("AWS_ACCESS_KEY_ID_COM"),

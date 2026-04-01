@@ -7,6 +7,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -103,11 +104,18 @@ func (r *Runner) run(
 	wg.Wait()
 
 	var final models.ExecutionBatch
-	r.db.First(&final, batchID)
+	if err := r.db.First(&final, batchID).Error; err != nil {
+		slog.Error("failed to load batch for final status update", "batch_id", batchID, "err", err)
+		return
+	}
+	var finalStatus models.ExecutionBatchStatus
 	if final.FailedInstances == final.TotalInstances {
-		r.db.Model(&final).Update("status", models.BatchStatusFailed)
+		finalStatus = models.BatchStatusFailed
 	} else {
-		r.db.Model(&final).Update("status", models.BatchStatusCompleted)
+		finalStatus = models.BatchStatusCompleted
+	}
+	if err := r.db.Model(&final).Update("status", finalStatus).Error; err != nil {
+		slog.Error("failed to update batch final status", "batch_id", batchID, "status", finalStatus, "err", err)
 	}
 }
 
@@ -130,7 +138,12 @@ func (r *Runner) runOne(
 		StartTime:    now,
 		ChangeNumber: req.ChangeNumber,
 	}
-	r.db.Create(exec)
+	if err := r.db.Create(exec).Error; err != nil {
+		slog.Error("failed to create execution record; skipping SSM send", "instance", instanceID, "batch", batchID, "err", err)
+		r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
+			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1"))
+		return
+	}
 
 	// Send first so the commandID is recorded before we block on polling.
 	// This means GET /api/aws/ssm/commands/{id} can find the record immediately.

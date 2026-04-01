@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/aws/credentials"
@@ -192,15 +193,26 @@ func (s *Server) handleGetCommandStatus(w http.ResponseWriter, r *http.Request) 
 		}
 
 		// Update the DB record if status changed or output arrived.
+		// Use a targeted update to avoid clobbering EndTime or other fields
+		// that may be written concurrently by the background runOne goroutine.
 		if string(ex.Status) != status.Status || ex.Output != status.Output {
-			ex.Status = models.ExecutionStatus(status.Status)
-			ex.Output = status.Output
-			ex.Error = status.Error
+			fields := map[string]any{
+				"status": models.ExecutionStatus(status.Status),
+				"output": status.Output,
+				"error":  status.Error,
+			}
 			if status.Done {
 				exitCode := status.ExitCode
 				ex.ExitCode = &exitCode
+				fields["exit_code"] = &exitCode
 			}
-			s.db.Save(ex)
+			if err := s.db.Model(ex).Updates(fields).Error; err != nil {
+				slog.Error("failed to persist execution status update", "execution_id", ex.ID, "err", err)
+			}
+			// Reflect locally so the response contains the updated values.
+			ex.Status = models.ExecutionStatus(status.Status)
+			ex.Output = status.Output
+			ex.Error = status.Error
 		}
 
 		results = append(results, *status)

@@ -108,5 +108,7 @@ func (s *Server) registerRoutes() {
 		readRL.Wrap(http.HandlerFunc(s.handleGetTool)))
 
 	// ── Static files ──────────────────────────────────────────────────────────
-	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir("./static"))))
+	// STATIC_DIR is configurable so the server works correctly in containers and
+	// systemd units where the working directory may differ from the binary location.
+	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(s.cfg.StaticDir))))
 }

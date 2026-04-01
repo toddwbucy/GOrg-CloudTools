@@ -37,8 +37,9 @@ func (s *Server) handleCreateSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	jsonOK(w, session)
+	json.NewEncoder(w).Encode(session) //nolint:errcheck
 }
 
 // handleGetSession returns a session with all its batches and per-instance executions.

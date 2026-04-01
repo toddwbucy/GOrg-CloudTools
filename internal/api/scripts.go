@@ -144,8 +144,13 @@ func (s *Server) handleUpdateScript(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteScript(w http.ResponseWriter, r *http.Request) {
-	if err := s.db.Delete(&models.Script{}, r.PathValue("id")).Error; err != nil {
+	res := s.db.Delete(&models.Script{}, r.PathValue("id"))
+	if res.Error != nil {
 		jsonError(w, "failed to delete script", http.StatusInternalServerError)
+		return
+	}
+	if res.RowsAffected == 0 {
+		jsonError(w, "script not found", http.StatusNotFound)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

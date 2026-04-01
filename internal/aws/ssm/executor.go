@@ -13,7 +13,9 @@ package ssm
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -46,7 +48,11 @@ type Executor struct {
 
 // New creates an Executor. timeoutSecs is used as the SSM command timeout
 // and as the deadline for the blocking Run() helper.
+// Non-positive values are clamped to 1 second to prevent immediate timeouts.
 func New(cfg aws.Config, timeoutSecs int) *Executor {
+	if timeoutSecs <= 0 {
+		timeoutSecs = 1
+	}
 	return &Executor{
 		client:  ssm.NewFromConfig(cfg),
 		timeout: time.Duration(timeoutSecs) * time.Second,
@@ -57,7 +63,7 @@ func New(cfg aws.Config, timeoutSecs int) *Executor {
 // instanceIDs may contain one or many targets.
 func (e *Executor) Send(ctx context.Context, instanceIDs []string, script, platform string) (string, error) {
 	doc := documentLinux
-	if platform == "windows" {
+	if strings.EqualFold(platform, "windows") {
 		doc = documentWindows
 	}
 	out, err := e.client.SendCommand(ctx, &ssm.SendCommandInput{
@@ -116,12 +122,27 @@ func (e *Executor) WaitForDone(ctx context.Context, commandID, instanceID string
 
 func (e *Executor) pollUntilDone(ctx context.Context, commandID, instanceID string) (*InvocationStatus, error) {
 	deadline := time.Now().Add(e.timeout)
+	var lastErr error
 	for {
 		if time.Now().After(deadline) {
+			if lastErr != nil {
+				return nil, fmt.Errorf("SSM command %s timed out after %v: last error: %w", commandID, e.timeout, lastErr)
+			}
 			return nil, fmt.Errorf("SSM command %s timed out after %v", commandID, e.timeout)
 		}
 		status, err := e.GetStatus(ctx, commandID, instanceID)
 		if err != nil {
+			if isRetryableSSMError(err) {
+				// InvocationDoesNotExist occurs briefly after Send() before SSM
+				// registers the invocation; throttling errors are also transient.
+				lastErr = err
+				select {
+				case <-ctx.Done():
+					return nil, ctx.Err()
+				case <-time.After(pollInterval):
+				}
+				continue
+			}
 			return nil, err
 		}
 		if status.Done {
@@ -133,6 +154,25 @@ func (e *Executor) pollUntilDone(ctx context.Context, commandID, instanceID stri
 		case <-time.After(pollInterval):
 		}
 	}
+}
+
+// isRetryableSSMError returns true for transient SSM errors that should be
+// retried within pollUntilDone rather than failing the job immediately.
+func isRetryableSSMError(err error) bool {
+	// InvocationDoesNotExist is returned briefly after SendCommand while SSM
+	// registers the invocation across the regional fleet.
+	var notExist *ssmtypes.InvocationDoesNotExist
+	if errors.As(err, &notExist) {
+		return true
+	}
+	// AWS SDK v2 retryable errors (throttling, transient service errors) expose
+	// a Retryable() bool method via the smithy retry interface.
+	type retryable interface{ Retryable() bool }
+	var re retryable
+	if errors.As(err, &re) {
+		return re.Retryable()
+	}
+	return false
 }
 
 func isTerminal(s ssmtypes.CommandInvocationStatus) bool {
