@@ -52,6 +52,12 @@ func New(db *gorm.DB, maxConcurrent, timeoutSecs int) *Runner {
 // and returns the batch ID immediately. The caller should poll
 // GET /api/exec/jobs/{id} for status.
 func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (uint, error) {
+	return r.start(ctx, ssm.New(cfg, r.timeoutSecs), req)
+}
+
+// start is the testable core of Start. It accepts an SSMExecutor so tests
+// can inject a mock without real AWS credentials.
+func (r *Runner) start(ctx context.Context, executor SSMExecutor, req ScriptRequest) (uint, error) {
 	// Validate inputs before touching the DB or AWS.
 	if req.ScriptID != nil && req.InlineScript != "" {
 		return 0, fmt.Errorf("only one of script_id or inline_script may be provided, not both")
@@ -92,13 +98,13 @@ func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (
 	}
 
 	// Detach from request context so the job outlives the HTTP connection.
-	go r.run(context.Background(), cfg, batch.ID, script, req.InstanceIDs, platform, req)
+	go r.run(context.Background(), executor, batch.ID, script, req.InstanceIDs, platform, req)
 	return batch.ID, nil
 }
 
 func (r *Runner) run(
 	ctx context.Context,
-	cfg aws.Config,
+	executor SSMExecutor,
 	batchID uint,
 	script *models.Script,
 	instanceIDs []string,
@@ -109,8 +115,6 @@ func (r *Runner) run(
 		Update("status", models.BatchStatusRunning).Error; err != nil {
 		slog.Error("failed to mark batch running", "batch_id", batchID, "err", err)
 	}
-
-	executor := ssm.New(cfg, r.timeoutSecs)
 
 	instancesCh := make(chan string, len(instanceIDs))
 	for _, iid := range instanceIDs {
@@ -149,7 +153,7 @@ func (r *Runner) run(
 
 func (r *Runner) runOne(
 	ctx context.Context,
-	executor *ssm.Executor,
+	executor SSMExecutor,
 	batchID uint,
 	script *models.Script,
 	instanceID, platform string,
