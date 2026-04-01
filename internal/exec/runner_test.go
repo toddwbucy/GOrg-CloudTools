@@ -187,10 +187,12 @@ func TestStart_EmptyPlatformDefaultsToLinux(t *testing.T) {
 	r := New(db, 1, 30)
 	s := seedScript(t, db)
 
-	var capturedPlatform string
+	// Buffered channel: sendFn runs in a goroutine; the channel provides
+	// explicit happens-before between the write and the test read.
+	platformCh := make(chan string, 1)
 	mock := &mockSSMExecutor{
 		sendFn: func(_ context.Context, _ []string, _, platform string) (string, error) {
-			capturedPlatform = platform
+			platformCh <- platform
 			return "cmd-id", nil
 		},
 		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
@@ -205,8 +207,9 @@ func TestStart_EmptyPlatformDefaultsToLinux(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	waitForBatch(t, db, batchID, 2*time.Second)
-	if capturedPlatform != "linux" {
-		t.Errorf("expected platform linux, got %q", capturedPlatform)
+	got := <-platformCh
+	if got != "linux" {
+		t.Errorf("expected platform linux, got %q", got)
 	}
 }
 
@@ -215,10 +218,10 @@ func TestStart_WindowsPlatformCaseInsensitive(t *testing.T) {
 	r := New(db, 1, 30)
 	s := seedScript(t, db)
 
-	var capturedPlatform string
+	platformCh := make(chan string, 1)
 	mock := &mockSSMExecutor{
 		sendFn: func(_ context.Context, _ []string, _, platform string) (string, error) {
-			capturedPlatform = platform
+			platformCh <- platform
 			return "cmd-id", nil
 		},
 		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
@@ -233,8 +236,9 @@ func TestStart_WindowsPlatformCaseInsensitive(t *testing.T) {
 		t.Fatalf("start: %v", err)
 	}
 	waitForBatch(t, db, batchID, 2*time.Second)
-	if capturedPlatform != "windows" {
-		t.Errorf("expected normalised platform windows, got %q", capturedPlatform)
+	got := <-platformCh
+	if got != "windows" {
+		t.Errorf("expected normalised platform windows, got %q", got)
 	}
 }
 
@@ -287,7 +291,9 @@ func TestStart_InlineScriptWindowsUsesCorrectType(t *testing.T) {
 	waitForBatch(t, db, batchID, 2*time.Second)
 
 	var s models.Script
-	db.Where("ephemeral = ?", true).First(&s)
+	if res := db.Where("ephemeral = ?", true).First(&s); res.Error != nil {
+		t.Fatalf("querying ephemeral script: %v", res.Error)
+	}
 	if s.ScriptType != "powershell" {
 		t.Errorf("expected script_type powershell, got %q", s.ScriptType)
 	}
@@ -308,7 +314,9 @@ func TestStart_EphemeralScriptCannotBeExecutedByID(t *testing.T) {
 		Interpreter: "bash",
 		Ephemeral:   true,
 	}
-	db.Create(s)
+	if err := db.Create(s).Error; err != nil {
+		t.Fatalf("seeding ephemeral script: %v", err)
+	}
 
 	_, err := r.start(context.Background(), successMock(), ScriptRequest{
 		ScriptID:    &s.ID,

@@ -60,8 +60,14 @@ func TestEncryptProducesUniqueCiphertexts(t *testing.T) {
 	for i := range key {
 		key[i] = 0xAB
 	}
-	ct1, _ := encrypt(key, []byte("same"))
-	ct2, _ := encrypt(key, []byte("same"))
+	ct1, err := encrypt(key, []byte("same"))
+	if err != nil {
+		t.Fatalf("encrypt ct1: %v", err)
+	}
+	ct2, err := encrypt(key, []byte("same"))
+	if err != nil {
+		t.Fatalf("encrypt ct2: %v", err)
+	}
 	if string(ct1) == string(ct2) {
 		t.Error("two encryptions of the same plaintext must produce different ciphertexts")
 	}

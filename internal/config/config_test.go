@@ -92,12 +92,21 @@ func TestLoad_ProductionRequires32CharSecretKey(t *testing.T) {
 	}
 }
 
-func TestLoad_ProductionAccepts32CharSecretKey(t *testing.T) {
+func TestLoad_ProductionAcceptsAtLeast32CharSecretKey(t *testing.T) {
 	t.Setenv("ENVIRONMENT", "production")
 	t.Setenv("SECRET_KEY", "exactly-32-chars-long-secret-key")
 	_, err := Load()
 	if err != nil {
-		t.Fatalf("expected valid 32-char SECRET_KEY to succeed, got: %v", err)
+		t.Fatalf("expected 32-char SECRET_KEY to succeed, got: %v", err)
+	}
+}
+
+func TestLoad_ProductionAcceptsLongerThan32CharSecretKey(t *testing.T) {
+	t.Setenv("ENVIRONMENT", "production")
+	t.Setenv("SECRET_KEY", "this-is-longer-than-32-characters-secret-key-value")
+	_, err := Load()
+	if err != nil {
+		t.Fatalf("expected SECRET_KEY longer than 32 chars to succeed, got: %v", err)
 	}
 }
 
