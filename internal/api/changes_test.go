@@ -1,84 +1,13 @@
 package api_test
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/glebarez/sqlite"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/api"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/config"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
-	gormlogger "gorm.io/gorm/logger"
 )
-
-// ── test helpers ──────────────────────────────────────────────────────────────
-
-func newChangeTestDB(t *testing.T) *gorm.DB {
-	t.Helper()
-	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{
-		Logger:         gormlogger.Default.LogMode(gormlogger.Silent),
-		TranslateError: true,
-	})
-	if err != nil {
-		t.Fatalf("open test db: %v", err)
-	}
-	sqlDB, err := db.DB()
-	if err != nil {
-		t.Fatalf("get sql.DB: %v", err)
-	}
-	sqlDB.SetMaxOpenConns(1)
-	if err := db.AutoMigrate(
-		&models.Change{},
-		&models.ChangeInstance{},
-		&models.Tool{},
-		&models.Script{},
-	); err != nil {
-		t.Fatalf("migrate: %v", err)
-	}
-	return db
-}
-
-func newChangeTestServer(t *testing.T, db *gorm.DB) *httptest.Server {
-	t.Helper()
-	cfg := &config.Config{
-		SecretKey:               "test-secret-key-32-bytes-minimum!!",
-		Environment:             "development",
-		SessionLifetimeMinutes:  60,
-		RateLimitAuth:           "1000/minute",
-		RateLimitExecution:      "1000/minute",
-		RateLimitRead:           "1000/minute",
-		RateLimitWrite:          "1000/minute",
-		StaticDir:               t.TempDir(),
-	}
-	handler := api.NewServer(cfg, db, nil)
-	ts := httptest.NewServer(handler)
-	t.Cleanup(ts.Close)
-	return ts
-}
-
-// jsonBody serialises v and returns an *bytes.Buffer suitable for http.NewRequest.
-func jsonBody(t *testing.T, v any) *bytes.Buffer {
-	t.Helper()
-	b, err := json.Marshal(v)
-	if err != nil {
-		t.Fatalf("marshal request body: %v", err)
-	}
-	return bytes.NewBuffer(b)
-}
-
-// decodeJSON decodes an HTTP response body into dst.
-func decodeJSON(t *testing.T, res *http.Response, dst any) {
-	t.Helper()
-	defer res.Body.Close()
-	if err := json.NewDecoder(res.Body).Decode(dst); err != nil {
-		t.Fatalf("decode response: %v", err)
-	}
-}
 
 // seedChange inserts a Change and returns it.
 func seedChange(t *testing.T, db *gorm.DB, changeNumber string, status models.ChangeStatus) models.Change {
@@ -97,8 +26,8 @@ func seedChange(t *testing.T, db *gorm.DB, changeNumber string, status models.Ch
 // ── POST /api/changes/ ────────────────────────────────────────────────────────
 
 func TestCreateChange_Success(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
 		jsonBody(t, map[string]any{
@@ -126,8 +55,8 @@ func TestCreateChange_Success(t *testing.T) {
 }
 
 func TestCreateChange_ExplicitStatus(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
 		jsonBody(t, map[string]any{
@@ -148,8 +77,8 @@ func TestCreateChange_ExplicitStatus(t *testing.T) {
 }
 
 func TestCreateChange_DuplicateChangeNumberReturns409(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
@@ -163,8 +92,8 @@ func TestCreateChange_DuplicateChangeNumberReturns409(t *testing.T) {
 }
 
 func TestCreateChange_MissingChangeNumber(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
 		jsonBody(t, map[string]any{"description": "no number"}))
@@ -177,8 +106,8 @@ func TestCreateChange_MissingChangeNumber(t *testing.T) {
 }
 
 func TestCreateChange_InvalidStatus(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
 		jsonBody(t, map[string]any{
@@ -194,8 +123,8 @@ func TestCreateChange_InvalidStatus(t *testing.T) {
 }
 
 func TestCreateChange_WithMetadata(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
 		jsonBody(t, map[string]any{
@@ -221,8 +150,8 @@ func TestCreateChange_WithMetadata(t *testing.T) {
 // ── GET /api/changes/ ─────────────────────────────────────────────────────────
 
 func TestListChanges_ReturnsAll(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 	seedChange(t, db, "CHG0002", models.ChangeStatusApproved)
 
@@ -248,8 +177,8 @@ func TestListChanges_ReturnsAll(t *testing.T) {
 }
 
 func TestListChanges_FilterByStatus(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 	seedChange(t, db, "CHG0002", models.ChangeStatusApproved)
 	seedChange(t, db, "CHG0003", models.ChangeStatusApproved)
@@ -274,8 +203,8 @@ func TestListChanges_FilterByStatus(t *testing.T) {
 }
 
 func TestListChanges_SearchByChangeNumber(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 	seedChange(t, db, "INC9999", models.ChangeStatusNew)
 
@@ -294,8 +223,8 @@ func TestListChanges_SearchByChangeNumber(t *testing.T) {
 }
 
 func TestListChanges_Pagination(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	// Seed 25 changes so a second page exists with the default page_size of 20.
 	for i := 1; i <= 25; i++ {
@@ -328,8 +257,8 @@ func TestListChanges_Pagination(t *testing.T) {
 }
 
 func TestListChanges_EmptyResult(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/api/changes/")
 	if err != nil {
@@ -351,8 +280,8 @@ func TestListChanges_EmptyResult(t *testing.T) {
 // ── GET /api/changes/{id} ─────────────────────────────────────────────────────
 
 func TestGetChange_Success(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	res, err := http.Get(ts.URL + "/api/changes/" + itoa(c.ID))
@@ -370,8 +299,8 @@ func TestGetChange_Success(t *testing.T) {
 }
 
 func TestGetChange_NotFound(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/api/changes/9999")
 	if err != nil {
@@ -383,8 +312,8 @@ func TestGetChange_NotFound(t *testing.T) {
 }
 
 func TestGetChange_PreloadsInstances(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusApproved)
 
 	// Seed an associated ChangeInstance.
@@ -414,8 +343,8 @@ func TestGetChange_PreloadsInstances(t *testing.T) {
 }
 
 func TestGetChange_PreloadsNonEphemeralScripts(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusApproved)
 
 	// Non-ephemeral script — should appear in the response.
@@ -464,8 +393,8 @@ func TestGetChange_PreloadsNonEphemeralScripts(t *testing.T) {
 // ── PATCH /api/changes/{id} ───────────────────────────────────────────────────
 
 func TestUpdateChange_Status(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	req, _ := http.NewRequest(http.MethodPatch,
@@ -487,8 +416,8 @@ func TestUpdateChange_Status(t *testing.T) {
 }
 
 func TestUpdateChange_Description(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	req, _ := http.NewRequest(http.MethodPatch,
@@ -511,8 +440,8 @@ func TestUpdateChange_Description(t *testing.T) {
 }
 
 func TestUpdateChange_Metadata(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	req, _ := http.NewRequest(http.MethodPatch,
@@ -533,8 +462,8 @@ func TestUpdateChange_Metadata(t *testing.T) {
 }
 
 func TestUpdateChange_OmittedMetadataPreservesExisting(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	// Create change with metadata.
 	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
@@ -565,8 +494,8 @@ func TestUpdateChange_OmittedMetadataPreservesExisting(t *testing.T) {
 }
 
 func TestUpdateChange_InvalidStatus(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	req, _ := http.NewRequest(http.MethodPatch,
@@ -583,8 +512,8 @@ func TestUpdateChange_InvalidStatus(t *testing.T) {
 }
 
 func TestUpdateChange_NotFound(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 
 	req, _ := http.NewRequest(http.MethodPatch,
 		ts.URL+"/api/changes/9999",
@@ -600,8 +529,8 @@ func TestUpdateChange_NotFound(t *testing.T) {
 }
 
 func TestUpdateChange_EmptyBody(t *testing.T) {
-	db := newChangeTestDB(t)
-	ts := newChangeTestServer(t, db)
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
 	c := seedChange(t, db, "CHG0001", models.ChangeStatusNew)
 
 	req, _ := http.NewRequest(http.MethodPatch,
@@ -623,7 +552,3 @@ func TestUpdateChange_EmptyBody(t *testing.T) {
 	}
 }
 
-// itoa converts a uint to its decimal string for use in URL paths.
-func itoa(id uint) string {
-	return fmt.Sprintf("%d", id)
-}
