@@ -263,12 +263,16 @@ func TestStart_InlineScriptIsPersistedAsEphemeral(t *testing.T) {
 	// The ephemeral script must exist in the DB (FK is satisfied) but must be
 	// invisible to the public scripts query (ephemeral = false filter).
 	var total int64
-	db.Model(&models.Script{}).Where("ephemeral = ?", true).Count(&total)
+	if err := db.Model(&models.Script{}).Where("ephemeral = ?", true).Count(&total).Error; err != nil {
+		t.Fatalf("counting ephemeral scripts: %v", err)
+	}
 	if total != 1 {
 		t.Errorf("expected 1 ephemeral script, found %d", total)
 	}
 	var publicTotal int64
-	db.Model(&models.Script{}).Where("ephemeral = ?", false).Count(&publicTotal)
+	if err := db.Model(&models.Script{}).Where("ephemeral = ?", false).Count(&publicTotal).Error; err != nil {
+		t.Fatalf("counting public scripts: %v", err)
+	}
 	if publicTotal != 0 {
 		t.Errorf("expected 0 public scripts, found %d", publicTotal)
 	}
