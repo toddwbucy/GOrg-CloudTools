@@ -46,6 +46,7 @@ type Config struct {
 	RateLimitAuth      string
 	RateLimitExecution string
 	RateLimitRead      string
+	RateLimitWrite     string
 }
 
 // Load reads configuration from environment variables.
@@ -82,6 +83,7 @@ func Load() (*Config, error) {
 		RateLimitAuth:           getEnv("RATE_LIMIT_AUTH_ENDPOINTS", "10/minute"),
 		RateLimitExecution:      getEnv("RATE_LIMIT_EXECUTION_ENDPOINTS", "5/minute"),
 		RateLimitRead:           getEnv("RATE_LIMIT_READ_ENDPOINTS", "100/minute"),
+		RateLimitWrite:          getEnv("RATE_LIMIT_WRITE_ENDPOINTS", "30/minute"),
 	}
 
 	if cfg.MaxConcurrentExecutions <= 0 {

@@ -51,6 +51,7 @@ func newChangeTestServer(t *testing.T, db *gorm.DB) *httptest.Server {
 		RateLimitAuth:           "1000/minute",
 		RateLimitExecution:      "1000/minute",
 		RateLimitRead:           "1000/minute",
+		RateLimitWrite:          "1000/minute",
 		StaticDir:               t.TempDir(),
 	}
 	handler := api.NewServer(cfg, db, nil)
@@ -142,6 +143,21 @@ func TestCreateChange_ExplicitStatus(t *testing.T) {
 	decodeJSON(t, res, &got)
 	if got.Status != models.ChangeStatusApproved {
 		t.Errorf("status: want approved, got %q", got.Status)
+	}
+}
+
+func TestCreateChange_DuplicateChangeNumberReturns409(t *testing.T) {
+	db := newChangeTestDB(t)
+	ts := newChangeTestServer(t, db)
+	seedChange(t, db, "CHG0001", models.ChangeStatusNew)
+
+	res, err := http.Post(ts.URL+"/api/changes/", "application/json",
+		jsonBody(t, map[string]any{"change_number": "CHG0001"}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	if res.StatusCode != http.StatusConflict {
+		t.Errorf("expected 409, got %d", res.StatusCode)
 	}
 }
 
@@ -276,6 +292,40 @@ func TestListChanges_SearchByChangeNumber(t *testing.T) {
 	}
 }
 
+func TestListChanges_Pagination(t *testing.T) {
+	db := newChangeTestDB(t)
+	ts := newChangeTestServer(t, db)
+
+	// Seed 25 changes so a second page exists with the default page_size of 20.
+	for i := 1; i <= 25; i++ {
+		seedChange(t, db, fmt.Sprintf("CHG%04d", i), models.ChangeStatusNew)
+	}
+
+	res, err := http.Get(ts.URL + "/api/changes/?page=2&page_size=20")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", res.StatusCode)
+	}
+
+	var body struct {
+		Items    []models.Change `json:"items"`
+		Total    int64           `json:"total"`
+		Page     int             `json:"page"`
+		PageSize int             `json:"page_size"`
+	}
+	decodeJSON(t, res, &body)
+
+	if body.Total != 25 {
+		t.Errorf("expected total=25, got %d", body.Total)
+	}
+	// Page 2 with page_size=20 should have the remaining 5 items.
+	if len(body.Items) != 5 {
+		t.Errorf("expected 5 items on page 2, got %d", len(body.Items))
+	}
+}
+
 func TestListChanges_EmptyResult(t *testing.T) {
 	db := newChangeTestDB(t)
 	ts := newChangeTestServer(t, db)
@@ -359,6 +409,54 @@ func TestGetChange_PreloadsInstances(t *testing.T) {
 	}
 	if got.Instances[0].InstanceID != "i-0abc123def456" {
 		t.Errorf("unexpected instance_id: %q", got.Instances[0].InstanceID)
+	}
+}
+
+func TestGetChange_PreloadsNonEphemeralScripts(t *testing.T) {
+	db := newChangeTestDB(t)
+	ts := newChangeTestServer(t, db)
+	c := seedChange(t, db, "CHG0001", models.ChangeStatusApproved)
+
+	// Non-ephemeral script — should appear in the response.
+	visible := models.Script{
+		Name:        "visible",
+		Content:     "echo ok",
+		ScriptType:  "bash",
+		Interpreter: "bash",
+		Ephemeral:   false,
+		ChangeID:    &c.ID,
+	}
+	if err := db.Create(&visible).Error; err != nil {
+		t.Fatalf("seed visible script: %v", err)
+	}
+
+	// Ephemeral script — must be filtered out.
+	hidden := models.Script{
+		Name:        "_inline",
+		Content:     "echo hidden",
+		ScriptType:  "bash",
+		Interpreter: "bash",
+		Ephemeral:   true,
+		ChangeID:    &c.ID,
+	}
+	if err := db.Create(&hidden).Error; err != nil {
+		t.Fatalf("seed hidden script: %v", err)
+	}
+
+	res, err := http.Get(ts.URL + "/api/changes/" + itoa(c.ID))
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", res.StatusCode)
+	}
+	var got models.Change
+	decodeJSON(t, res, &got)
+	if len(got.Scripts) != 1 {
+		t.Errorf("expected 1 non-ephemeral script, got %d", len(got.Scripts))
+	}
+	if len(got.Scripts) > 0 && got.Scripts[0].Name != "visible" {
+		t.Errorf("expected script name %q, got %q", "visible", got.Scripts[0].Name)
 	}
 }
 

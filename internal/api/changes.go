@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"strings"
 
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
@@ -102,6 +103,12 @@ func (s *Server) handleCreateChange(w http.ResponseWriter, r *http.Request) {
 		ChangeMetadata: body.ChangeMetadata,
 	}
 	if err := s.db.Create(&change).Error; err != nil {
+		// SQLite UNIQUE constraint failures contain this substring; return 409
+		// so callers can distinguish a duplicate change_number from a server fault.
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			jsonError(w, "change_number already exists", http.StatusConflict)
+			return
+		}
 		jsonError(w, "failed to create change", http.StatusInternalServerError)
 		return
 	}
@@ -151,20 +158,27 @@ func (s *Server) handleUpdateChange(w http.ResponseWriter, r *http.Request) {
 		updates["status"] = s
 	}
 	if len(patch.ChangeMetadata) > 0 {
-		var meta map[string]any
-		if err := json.Unmarshal(patch.ChangeMetadata, &meta); err != nil {
-			jsonError(w, "invalid change_metadata: must be a JSON object", http.StatusBadRequest)
-			return
+		// json.RawMessage("null") has len=4, so the length check alone does not
+		// distinguish an explicit null from an object. An explicit null means
+		// "clear the metadata" → write SQL NULL rather than the string "null".
+		if string(patch.ChangeMetadata) == "null" {
+			updates["change_metadata"] = nil
+		} else {
+			var meta map[string]any
+			if err := json.Unmarshal(patch.ChangeMetadata, &meta); err != nil {
+				jsonError(w, "invalid change_metadata: must be a JSON object or null", http.StatusBadRequest)
+				return
+			}
+			// Pre-serialize to a JSON string so GORM stores it correctly in the
+			// serializer:json column — GORM does not apply struct-field serializers
+			// when the value is passed through a map[string]any updates map.
+			metaJSON, err := json.Marshal(meta)
+			if err != nil {
+				jsonError(w, "failed to serialize change_metadata", http.StatusInternalServerError)
+				return
+			}
+			updates["change_metadata"] = string(metaJSON)
 		}
-		// Pre-serialize to a JSON string so GORM stores it correctly in the
-		// serializer:json column — GORM does not apply struct-field serializers
-		// when the value is passed through a map[string]any updates map.
-		metaJSON, err := json.Marshal(meta)
-		if err != nil {
-			jsonError(w, "failed to serialize change_metadata", http.StatusInternalServerError)
-			return
-		}
-		updates["change_metadata"] = string(metaJSON)
 	}
 
 	if len(updates) > 0 {
