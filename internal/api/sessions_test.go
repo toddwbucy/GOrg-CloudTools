@@ -225,7 +225,10 @@ func TestUpdateSessionStatus_Success(t *testing.T) {
 	}
 
 	// Verify via GET.
-	getRes, _ := http.Get(ts.URL + "/api/sessions/" + itoa(sess.ID))
+	getRes, err := http.Get(ts.URL + "/api/sessions/" + itoa(sess.ID))
+	if err != nil {
+		t.Fatalf("GET after update: %v", err)
+	}
 	var got models.ExecutionSession
 	decodeJSON(t, getRes, &got)
 	if got.Status != "completed" {

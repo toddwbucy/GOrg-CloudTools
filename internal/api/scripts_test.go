@@ -91,7 +91,9 @@ func TestListScripts_ScriptTypeFilter(t *testing.T) {
 	ts := newTestServer(t, db)
 
 	seedScript(t, db, "bash-script") // script_type defaults to "bash" via seedScript
-	db.Create(&models.Script{Name: "ps-script", Content: "echo ps", ScriptType: "powershell", Interpreter: "powershell"})
+	if err := db.Create(&models.Script{Name: "ps-script", Content: "echo ps", ScriptType: "powershell", Interpreter: "powershell"}).Error; err != nil {
+		t.Fatalf("seed ps-script: %v", err)
+	}
 
 	res, err := http.Get(ts.URL + "/api/scripts/?script_type=powershell")
 	if err != nil {
@@ -111,8 +113,12 @@ func TestListScripts_IsTemplateFilter(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
-	db.Create(&models.Script{Name: "template", Content: "echo t", ScriptType: "bash", Interpreter: "bash", IsTemplate: true})
-	db.Create(&models.Script{Name: "non-template", Content: "echo n", ScriptType: "bash", Interpreter: "bash", IsTemplate: false})
+	if err := db.Create(&models.Script{Name: "template", Content: "echo t", ScriptType: "bash", Interpreter: "bash", IsTemplate: true}).Error; err != nil {
+		t.Fatalf("seed template: %v", err)
+	}
+	if err := db.Create(&models.Script{Name: "non-template", Content: "echo n", ScriptType: "bash", Interpreter: "bash", IsTemplate: false}).Error; err != nil {
+		t.Fatalf("seed non-template: %v", err)
+	}
 
 	res, err := http.Get(ts.URL + "/api/scripts/?is_template=true")
 	if err != nil {
@@ -125,6 +131,9 @@ func TestListScripts_IsTemplateFilter(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.Total != 1 {
 		t.Errorf("expected 1 template, got %d", body.Total)
+	}
+	if len(body.Items) == 0 {
+		t.Fatal("expected at least 1 item in response")
 	}
 	if body.Items[0].Name != "template" {
 		t.Errorf("expected template, got %q", body.Items[0].Name)
@@ -149,12 +158,14 @@ func TestListScripts_Pagination(t *testing.T) {
 	ts := newTestServer(t, db)
 
 	for i := 1; i <= 25; i++ {
-		db.Create(&models.Script{
+		if err := db.Create(&models.Script{
 			Name:        itoa(uint(i)),
 			Content:     "echo " + itoa(uint(i)),
 			ScriptType:  "bash",
 			Interpreter: "bash",
-		})
+		}).Error; err != nil {
+			t.Fatalf("seed script %d: %v", i, err)
+		}
 	}
 
 	res, err := http.Get(ts.URL + "/api/scripts/?page=2&page_size=20")

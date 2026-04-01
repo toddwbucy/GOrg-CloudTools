@@ -1,7 +1,6 @@
 package api_test
 
 import (
-	"encoding/json"
 	"net/http"
 	"testing"
 )
@@ -14,14 +13,11 @@ func TestHealth_ReturnsOK(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /health: %v", err)
 	}
-	defer res.Body.Close()
 	if res.StatusCode != http.StatusOK {
 		t.Errorf("expected 200, got %d", res.StatusCode)
 	}
 	var body map[string]string
-	if err := json.NewDecoder(res.Body).Decode(&body); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
+	decodeJSON(t, res, &body)
 	if body["status"] != "healthy" {
 		t.Errorf("status: want healthy, got %q", body["status"])
 	}

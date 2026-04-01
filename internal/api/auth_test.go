@@ -15,6 +15,7 @@ func TestCreateCredentials_MissingFields(t *testing.T) {
 	cases := []map[string]any{
 		{"secret_access_key": "secret", "environment": "com"}, // no access_key_id
 		{"access_key_id": "AKID", "environment": "com"},       // no secret_access_key
+		{"access_key_id": "AKID", "secret_access_key": "s"},   // no environment
 	}
 	for _, body := range cases {
 		res, err := http.Post(ts.URL+"/api/auth/aws-credentials", "application/json", jsonBody(t, body))
@@ -168,11 +169,14 @@ func TestDeleteCredentials_ClearsSession(t *testing.T) {
 	postRes.Body.Close()
 
 	// Confirm credentials are present.
-	getRes, _ := client.Get(ts.URL + "/api/auth/aws-credentials/com")
+	getRes, err := client.Get(ts.URL + "/api/auth/aws-credentials/com")
+	if err != nil {
+		t.Fatalf("GET before delete: %v", err)
+	}
+	getRes.Body.Close()
 	if getRes.StatusCode != http.StatusOK {
 		t.Fatalf("expected credentials before delete, got %d", getRes.StatusCode)
 	}
-	getRes.Body.Close()
 
 	// Delete.
 	req, _ := http.NewRequest(http.MethodDelete, ts.URL+"/api/auth/aws-credentials/com", nil)
@@ -186,7 +190,10 @@ func TestDeleteCredentials_ClearsSession(t *testing.T) {
 	}
 
 	// After delete, credentials should be gone.
-	getRes2, _ := client.Get(ts.URL + "/api/auth/aws-credentials/com")
+	getRes2, err := client.Get(ts.URL + "/api/auth/aws-credentials/com")
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
 	getRes2.Body.Close()
 	if getRes2.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404 after delete, got %d", getRes2.StatusCode)
