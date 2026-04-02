@@ -51,6 +51,13 @@ func TestHomeRegion_Empty(t *testing.T) {
 // (STS GetCallerIdentity) is intentionally not called here — that requires live
 // AWS and belongs in integration tests.
 
+func TestFromSession_NilSession_ReturnsError(t *testing.T) {
+	_, _, err := credentials.FromSession(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected error for nil session")
+	}
+}
+
 func TestFromSession_EmptySession_ReturnsError(t *testing.T) {
 	_, _, err := credentials.FromSession(context.Background(), &middleware.Session{})
 	if err == nil {

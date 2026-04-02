@@ -63,6 +63,25 @@ func TestTagsToMap_MultipleTags(t *testing.T) {
 	}
 }
 
+func TestTagsToMap_NilKeyValue(t *testing.T) {
+	// aws.ToString returns "" for nil pointers, so nil Key becomes the empty
+	// string map key and nil Value becomes an empty string map value.
+	tags := []ec2types.Tag{
+		{Key: nil, Value: aws.String("orphan-value")},
+		{Key: aws.String("present-key"), Value: nil},
+	}
+	got := tagsToMap(tags)
+	if len(got) != 2 {
+		t.Fatalf("want 2 entries, got %d", len(got))
+	}
+	if got[""] != "orphan-value" {
+		t.Errorf("nil key: want \"\" → orphan-value, got %q", got[""])
+	}
+	if got["present-key"] != "" {
+		t.Errorf("nil value: want present-key → \"\", got %q", got["present-key"])
+	}
+}
+
 func TestTagsToMap_DuplicateKey_LastWins(t *testing.T) {
 	// Duplicate keys are unusual in AWS but the map write order means the last
 	// value for a given key is retained.
