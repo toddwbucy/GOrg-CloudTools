@@ -238,7 +238,7 @@ func TestUpdateSessionStatus_Success(t *testing.T) {
 	}
 	defer res.Body.Close()
 	if res.StatusCode != http.StatusNoContent {
-		t.Errorf("expected 204, got %d", res.StatusCode)
+		t.Fatalf("expected 204, got %d", res.StatusCode)
 	}
 
 	// Verify via GET.
