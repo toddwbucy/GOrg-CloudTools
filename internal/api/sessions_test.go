@@ -63,6 +63,9 @@ func TestCreateSession_DefaultsToInProgress(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST: %v", err)
 	}
+	if res.StatusCode != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", res.StatusCode)
+	}
 	var got models.ExecutionSession
 	decodeJSON(t, res, &got)
 	if got.Status != "in_progress" {
@@ -99,6 +102,7 @@ func TestGetSession_NotFound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", res.StatusCode)
 	}
@@ -127,6 +131,9 @@ func TestGetSession_PreloadsBatches(t *testing.T) {
 	res, err := http.Get(ts.URL + "/api/sessions/" + itoa(sess.ID))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
 	}
 	var got models.ExecutionSession
 	decodeJSON(t, res, &got)
@@ -171,6 +178,9 @@ func TestListSessions_FilterByWorkflowType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
 	var body struct {
 		Items []models.ExecutionSession `json:"items"`
 		Total int64                     `json:"total"`
@@ -195,6 +205,9 @@ func TestListSessions_FilterByStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
 	var body struct {
 		Items []models.ExecutionSession `json:"items"`
 		Total int64                     `json:"total"`
@@ -212,14 +225,18 @@ func TestUpdateSessionStatus_Success(t *testing.T) {
 	ts := newTestServer(t, db)
 	sess := seedSession(t, db, "linux-qc", "in_progress")
 
-	req, _ := http.NewRequest(http.MethodPatch,
+	req, err := http.NewRequest(http.MethodPatch,
 		ts.URL+"/api/sessions/"+itoa(sess.ID)+"/status",
 		jsonBody(t, map[string]any{"status": "completed"}))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusNoContent {
 		t.Errorf("expected 204, got %d", res.StatusCode)
 	}
@@ -241,14 +258,18 @@ func TestUpdateSessionStatus_InvalidStatus(t *testing.T) {
 	ts := newTestServer(t, db)
 	sess := seedSession(t, db, "linux-qc", "in_progress")
 
-	req, _ := http.NewRequest(http.MethodPatch,
+	req, err := http.NewRequest(http.MethodPatch,
 		ts.URL+"/api/sessions/"+itoa(sess.ID)+"/status",
 		jsonBody(t, map[string]any{"status": "banana"}))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", res.StatusCode)
 	}
@@ -258,14 +279,18 @@ func TestUpdateSessionStatus_NotFound(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
-	req, _ := http.NewRequest(http.MethodPatch,
+	req, err := http.NewRequest(http.MethodPatch,
 		ts.URL+"/api/sessions/9999/status",
 		jsonBody(t, map[string]any{"status": "completed"}))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("PATCH: %v", err)
 	}
+	defer res.Body.Close()
 	if res.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", res.StatusCode)
 	}
