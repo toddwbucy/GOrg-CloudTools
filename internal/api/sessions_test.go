@@ -38,7 +38,7 @@ func TestCreateSession_Success(t *testing.T) {
 		t.Fatalf("POST: %v", err)
 	}
 	if res.StatusCode != http.StatusCreated {
-		t.Errorf("expected 201, got %d", res.StatusCode)
+		t.Fatalf("expected 201, got %d", res.StatusCode)
 	}
 
 	var got models.ExecutionSession
@@ -85,7 +85,7 @@ func TestGetSession_Success(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", res.StatusCode)
+		t.Fatalf("expected 200, got %d", res.StatusCode)
 	}
 	var got models.ExecutionSession
 	decodeJSON(t, res, &got)
@@ -155,7 +155,7 @@ func TestListSessions_ReturnsAll(t *testing.T) {
 		t.Fatalf("GET: %v", err)
 	}
 	if res.StatusCode != http.StatusOK {
-		t.Errorf("expected 200, got %d", res.StatusCode)
+		t.Fatalf("expected 200, got %d", res.StatusCode)
 	}
 
 	var body struct {
@@ -245,6 +245,9 @@ func TestUpdateSessionStatus_Success(t *testing.T) {
 	getRes, err := http.Get(ts.URL + "/api/sessions/" + itoa(sess.ID))
 	if err != nil {
 		t.Fatalf("GET after update: %v", err)
+	}
+	if getRes.StatusCode != http.StatusOK {
+		t.Fatalf("GET after update: expected 200, got %d", getRes.StatusCode)
 	}
 	var got models.ExecutionSession
 	decodeJSON(t, getRes, &got)
