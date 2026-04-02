@@ -26,6 +26,9 @@ type Identity struct {
 // Returns the config and the home region for that environment.
 // The home region is required by gorg-aws's VisitOrganization and DryRun.
 func FromSession(ctx context.Context, sess *middleware.Session) (aws.Config, string, error) {
+	if sess == nil {
+		return aws.Config{}, "", fmt.Errorf("no AWS credentials in session")
+	}
 	if sess.AWSAccessKeyID == "" || sess.AWSSecretAccessKey == "" {
 		return aws.Config{}, "", fmt.Errorf("no AWS credentials in session")
 	}
