@@ -166,6 +166,19 @@ func TestListSessions_ReturnsAll(t *testing.T) {
 	if body.Total != 2 {
 		t.Errorf("expected total=2, got %d", body.Total)
 	}
+	if len(body.Items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(body.Items))
+	}
+	found := map[string]bool{}
+	for _, s := range body.Items {
+		found[s.WorkflowType] = true
+	}
+	if !found["linux-qc"] {
+		t.Errorf("expected linux-qc in results")
+	}
+	if !found["script-runner"] {
+		t.Errorf("expected script-runner in results")
+	}
 }
 
 func TestListSessions_FilterByWorkflowType(t *testing.T) {
@@ -189,8 +202,14 @@ func TestListSessions_FilterByWorkflowType(t *testing.T) {
 	if body.Total != 1 {
 		t.Errorf("expected 1 session, got %d", body.Total)
 	}
-	if len(body.Items) > 0 && body.Items[0].WorkflowType != "linux-qc" {
+	if len(body.Items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(body.Items))
+	}
+	if body.Items[0].WorkflowType != "linux-qc" {
 		t.Errorf("wrong workflow_type: %q", body.Items[0].WorkflowType)
+	}
+	if body.Items[0].Status != "in_progress" {
+		t.Errorf("wrong status: %q", body.Items[0].Status)
 	}
 }
 
@@ -215,6 +234,14 @@ func TestListSessions_FilterByStatus(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if body.Total != 2 {
 		t.Errorf("expected 2 completed sessions, got %d", body.Total)
+	}
+	if len(body.Items) != 2 {
+		t.Errorf("expected 2 items, got %d", len(body.Items))
+	}
+	for _, s := range body.Items {
+		if s.Status != "completed" {
+			t.Errorf("unexpected status %q in filtered result", s.Status)
+		}
 	}
 }
 
