@@ -66,6 +66,8 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("DELETE /api/auth/aws-credentials/{environment}",
 		authRL.Wrap(http.HandlerFunc(s.handleDeleteCredentials)))
 	s.mux.HandleFunc("GET /api/auth/session-status", s.handleSessionStatus)
+	s.mux.Handle("GET /api/auth/aws-check-credentials",
+		readRL.Wrap(http.HandlerFunc(s.handleCheckServerCredentials)))
 
 	// ── Script execution primitives ───────────────────────────────────────────
 	s.mux.Handle("POST /api/exec/script",
@@ -74,6 +76,8 @@ func (s *Server) registerRoutes() {
 		execRL.Wrap(http.HandlerFunc(s.handleExecOrgScript)))
 	s.mux.Handle("GET /api/exec/jobs/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetJob)))
+	s.mux.Handle("POST /api/exec/jobs/{id}/resume",
+		execRL.Wrap(http.HandlerFunc(s.handleResumeJob)))
 	// Universal SSM command status primitive — used by every SSM-based workflow.
 	s.mux.Handle("GET /api/aws/ssm/commands/{command_id}/status",
 		readRL.Wrap(http.HandlerFunc(s.handleGetCommandStatus)))
@@ -118,6 +122,8 @@ func (s *Server) registerRoutes() {
 		readRL.Wrap(http.HandlerFunc(s.handleListTools)))
 	s.mux.Handle("GET /api/tools/{id}",
 		readRL.Wrap(http.HandlerFunc(s.handleGetTool)))
+	s.mux.Handle("POST /api/exec/tool",
+		execRL.Wrap(http.HandlerFunc(s.handleExecuteTool)))
 
 	// ── Static files ──────────────────────────────────────────────────────────
 	// STATIC_DIR is configurable so the server works correctly in containers and

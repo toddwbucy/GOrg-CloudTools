@@ -37,6 +37,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	// Mark any jobs left in-flight by a previous server instance as interrupted
+	// so they don't stay stuck as "running" forever. Users can resume them via
+	// POST /api/exec/jobs/{id}/resume.
+	if n, err := exec.RecoverOrphanedJobs(context.Background(), database); err != nil {
+		slog.Warn("startup recovery query failed", "err", err)
+	} else if n > 0 {
+		slog.Warn("interrupted orphaned jobs from previous server instance",
+			"count", n,
+			"resume_via", "POST /api/exec/jobs/{id}/resume")
+	}
+
 	// OrgRunners are optional: one per AWS environment that has server-side
 	// management credentials configured. Per-account workflows always use
 	// session credentials; org-scoped endpoints return 503 for unconfigured envs.

@@ -6,10 +6,14 @@ import "time"
 type ExecutionStatus string
 
 const (
-	ExecutionStatusPending   ExecutionStatus = "pending"
-	ExecutionStatusRunning   ExecutionStatus = "running"
-	ExecutionStatusCompleted ExecutionStatus = "completed"
-	ExecutionStatusFailed    ExecutionStatus = "failed"
+	ExecutionStatusPending     ExecutionStatus = "pending"
+	ExecutionStatusRunning     ExecutionStatus = "running"
+	ExecutionStatusCompleted   ExecutionStatus = "completed"
+	ExecutionStatusFailed      ExecutionStatus = "failed"
+	// ExecutionStatusInterrupted means the server restarted while this execution
+	// was in-flight. The SSM command may have completed; use the resume endpoint
+	// to re-attach polling and recover the final result.
+	ExecutionStatusInterrupted ExecutionStatus = "interrupted"
 )
 
 // Execution records a single script run against one EC2 instance.
@@ -42,10 +46,13 @@ type Execution struct {
 type ExecutionBatchStatus string
 
 const (
-	BatchStatusPending   ExecutionBatchStatus = "pending"
-	BatchStatusRunning   ExecutionBatchStatus = "running"
-	BatchStatusCompleted ExecutionBatchStatus = "completed"
-	BatchStatusFailed    ExecutionBatchStatus = "failed"
+	BatchStatusPending     ExecutionBatchStatus = "pending"
+	BatchStatusRunning     ExecutionBatchStatus = "running"
+	BatchStatusCompleted   ExecutionBatchStatus = "completed"
+	BatchStatusFailed      ExecutionBatchStatus = "failed"
+	// BatchStatusInterrupted means the server restarted while this batch was
+	// in-flight. Use POST /api/exec/jobs/{id}/resume to re-attach polling.
+	BatchStatusInterrupted ExecutionBatchStatus = "interrupted"
 )
 
 // ExecutionBatch aggregates results for a script executed across multiple instances.

@@ -24,7 +24,15 @@ import (
 )
 
 const (
-	pollInterval    = 5 * time.Second
+	// pollIntervalMin is the initial poll interval and the fixed retry delay for
+	// transient errors (InvocationDoesNotExist, throttling). Kept short so quick
+	// scripts get fast feedback.
+	pollIntervalMin = 5 * time.Second
+	// pollIntervalMax caps the exponential backoff for long-running commands.
+	// Polling every 30 s is well within SSM's GetCommandInvocation rate limits
+	// even across a large fleet of concurrent jobs.
+	pollIntervalMax = 30 * time.Second
+
 	documentLinux   = "AWS-RunShellScript"
 	documentWindows = "AWS-RunPowerShellScript"
 )
@@ -62,6 +70,10 @@ func New(cfg aws.Config, timeoutSecs int) *Executor {
 // Send issues a SendCommand call and returns the commandID immediately.
 // instanceIDs may contain one or many targets.
 func (e *Executor) Send(ctx context.Context, instanceIDs []string, script, platform string) (string, error) {
+	// Normalise line endings before sending. Scripts edited on Windows contain
+	// CRLF which causes unexpected behaviour in Linux shell interpreters.
+	script = strings.ReplaceAll(strings.ReplaceAll(script, "\r\n", "\n"), "\r", "\n")
+
 	doc := documentLinux
 	if strings.EqualFold(platform, "windows") {
 		doc = documentWindows
@@ -122,6 +134,10 @@ func (e *Executor) WaitForDone(ctx context.Context, commandID, instanceID string
 
 func (e *Executor) pollUntilDone(ctx context.Context, commandID, instanceID string) (*InvocationStatus, error) {
 	deadline := time.Now().Add(e.timeout)
+	// interval grows exponentially (5 s → 10 s → 20 s → 30 s) for the
+	// "command still running" case only. Transient errors always retry at
+	// pollIntervalMin so a quick script doesn't wait 30 s for its first result.
+	interval := pollIntervalMin
 	var lastErr error
 	for {
 		if time.Now().After(deadline) {
@@ -135,11 +151,12 @@ func (e *Executor) pollUntilDone(ctx context.Context, commandID, instanceID stri
 			if isRetryableSSMError(err) {
 				// InvocationDoesNotExist occurs briefly after Send() before SSM
 				// registers the invocation; throttling errors are also transient.
+				// Always retry at the minimum interval — these resolve in seconds.
 				lastErr = err
 				select {
 				case <-ctx.Done():
 					return nil, ctx.Err()
-				case <-time.After(pollInterval):
+				case <-time.After(pollIntervalMin):
 				}
 				continue
 			}
@@ -151,7 +168,14 @@ func (e *Executor) pollUntilDone(ctx context.Context, commandID, instanceID stri
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
-		case <-time.After(pollInterval):
+		case <-time.After(interval):
+		}
+		// Back off for the next "still running" wait, capped at pollIntervalMax.
+		if interval < pollIntervalMax {
+			interval *= 2
+			if interval > pollIntervalMax {
+				interval = pollIntervalMax
+			}
 		}
 	}
 }

@@ -226,6 +226,41 @@ func (s *Server) handleGetCommandStatus(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// handleResumeJob re-attaches polling to an interrupted batch using the
+// session credentials provided by the user. Returns 202 immediately;
+// the client should poll GET /api/exec/jobs/{id} for final status.
+func (s *Server) handleResumeJob(w http.ResponseWriter, r *http.Request) {
+	var batch models.ExecutionBatch
+	if err := s.db.First(&batch, r.PathValue("id")).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			jsonError(w, "job not found", http.StatusNotFound)
+		} else {
+			jsonError(w, "database error", http.StatusInternalServerError)
+		}
+		return
+	}
+	if batch.Status != models.BatchStatusInterrupted {
+		jsonError(w, "job is not in interrupted state", http.StatusConflict)
+		return
+	}
+
+	sess := middleware.GetSession(r)
+	cfg, _, err := awscreds.FromSession(r.Context(), sess)
+	if err != nil {
+		jsonError(w, "no valid AWS credentials in session", http.StatusUnauthorized)
+		return
+	}
+
+	runner := exec.New(s.db, s.cfg.MaxConcurrentExecutions, s.cfg.ExecutionTimeoutSecs)
+	if err := runner.Resume(r.Context(), cfg, batch.ID); err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	jsonOK(w, map[string]any{"job_id": batch.ID})
+}
+
 // handleGetJob returns the current status of an ExecutionBatch and its per-instance results.
 func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	var batch models.ExecutionBatch

@@ -76,9 +76,10 @@ unit-tested in `manager_test.go`.
 | Type / Function | Reason |
 |---|---|
 | `OrgRunner` (all methods) | Wraps `*gorgaws.OrgVisitor`, a concrete struct with no injectable interface. Cannot be mocked without either live AWS management credentials or a production code change to introduce a visitor interface. |
+| `Runner.Resume` (happy path) | Calls `ssm.New(cfg, ...)` with real credentials; the underlying `WaitForDone` call requires a live SSM command ID in a real account. |
 
-`Runner` and its `start` seam are already fully unit-tested in `runner_test.go`
-via the `SSMExecutor` mock interface.
+`Runner.start`, `Runner.resume`, and `RecoverOrphanedJobs` are fully unit-tested
+via the `SSMExecutor` mock interface and an in-memory SQLite database.
 
 ---
 
@@ -97,6 +98,7 @@ paths** are untested because they call through to real AWS:
 | `handleDescribeVPCs` | `GET /api/aws/vpcs` | EC2 `DescribeVpcs/Subnets/SecurityGroups` |
 | `handleOrgAccounts` | `GET /api/aws/org/accounts` | `OrgRunner.DryRun` → gorg-aws |
 | `handleCreateCredentials` (non-dev) | `POST /api/auth/aws-credentials` | STS `GetCallerIdentity` |
+| `handleExecuteTool` (success path) | `POST /api/exec/tool` | `exec.Runner.Start` → SSM `SendCommand` (one batch per tool script) |
 
 ---
 

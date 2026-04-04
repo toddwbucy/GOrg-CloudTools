@@ -4,6 +4,8 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+
+	"github.com/toddwbucy/GOrg-CloudTools/internal/config"
 )
 
 // ── POST /api/auth/aws-credentials ───────────────────────────────────────────
@@ -129,8 +131,8 @@ func TestGetCredentials_WrongEnv_ReturnsNotFound(t *testing.T) {
 	// Store credentials for "com".
 	postRes, err := client.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
 		jsonBody(t, map[string]any{
-			"access_key_id":     "AKID",
-			"secret_access_key": "secret",
+			"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+			"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			"environment":       "com",
 		}))
 	if err != nil {
@@ -159,8 +161,8 @@ func TestDeleteCredentials_ClearsSession(t *testing.T) {
 	// Store credentials.
 	postRes, err := client.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
 		jsonBody(t, map[string]any{
-			"access_key_id":     "AKID",
-			"secret_access_key": "secret",
+			"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+			"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			"environment":       "com",
 		}))
 	if err != nil {
@@ -248,5 +250,137 @@ func TestSessionStatus_AuthenticatedDevMode(t *testing.T) {
 	env, _ := body["environment"].(string)
 	if !strings.EqualFold(env, "com") {
 		t.Errorf("environment: want com, got %q", env)
+	}
+}
+
+// ── credential input validation ───────────────────────────────────────────────
+
+func TestCreateCredentials_InvalidAccessKeyFormat(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	cases := []string{
+		"AKID",               // too short
+		"akiaiosfodnn7exam",  // lowercase — must be uppercase
+		"XXXX0000000000000000", // invalid prefix
+		"AKIA00000000000000000", // too long (21 chars)
+	}
+	for _, key := range cases {
+		res, err := http.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
+			jsonBody(t, map[string]any{
+				"access_key_id":     key,
+				"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+				"environment":       "com",
+			}))
+		if err != nil {
+			t.Fatalf("POST (key=%q): %v", key, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusBadRequest {
+			t.Errorf("key %q: expected 400, got %d", key, res.StatusCode)
+		}
+	}
+}
+
+func TestCreateCredentials_XSSInSecretKey(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	cases := []string{
+		"<script>alert(1)</script>",
+		"javascript:alert(1)",
+		"data:text/html,<h1>",
+	}
+	for _, secret := range cases {
+		res, err := http.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
+			jsonBody(t, map[string]any{
+				"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+				"secret_access_key": secret,
+				"environment":       "com",
+			}))
+		if err != nil {
+			t.Fatalf("POST: %v", err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusBadRequest {
+			t.Errorf("secret %q: expected 400, got %d", secret, res.StatusCode)
+		}
+	}
+}
+
+func TestCreateCredentials_XSSInSessionToken(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	res, err := http.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
+		jsonBody(t, map[string]any{
+			"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+			"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+			"session_token":     "<iframe src=evil.com>",
+			"environment":       "com",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for XSS in session_token, got %d", res.StatusCode)
+	}
+}
+
+// ── GET /api/auth/aws-check-credentials ──────────────────────────────────────
+
+func TestCheckServerCredentials_NoServerCreds(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db) // default config has no server-side AWS creds
+
+	res, err := http.Get(ts.URL + "/api/auth/aws-check-credentials")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", res.StatusCode)
+	}
+	var body map[string]any
+	decodeJSON(t, res, &body)
+	if body["org_execution_enabled"] != false {
+		t.Errorf("org_execution_enabled: want false, got %v", body["org_execution_enabled"])
+	}
+	envs, _ := body["available_environments"].([]any)
+	if len(envs) != 0 {
+		t.Errorf("available_environments: want empty, got %v", envs)
+	}
+}
+
+func TestCheckServerCredentials_WithServerCreds(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServerWithConfig(t, db, &config.Config{
+		SecretKey:              "test-secret-key-32-bytes-minimum!!",
+		Environment:            "development",
+		AWSAccessKeyIDCOM:      "AKIAIOSFODNN7EXAMPLE",
+		AWSSecretAccessKeyCOM:  "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		SessionLifetimeMinutes: 60,
+		RateLimitAuth:          "1000/minute",
+		RateLimitExecution:     "1000/minute",
+		RateLimitRead:          "1000/minute",
+		RateLimitWrite:         "1000/minute",
+		StaticDir:              t.TempDir(),
+	})
+
+	res, err := http.Get(ts.URL + "/api/auth/aws-check-credentials")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("expected 200, got %d", res.StatusCode)
+	}
+	var body map[string]any
+	decodeJSON(t, res, &body)
+	if body["org_execution_enabled"] != true {
+		t.Errorf("org_execution_enabled: want true, got %v", body["org_execution_enabled"])
+	}
+	envs, _ := body["available_environments"].([]any)
+	if len(envs) != 1 {
+		t.Errorf("available_environments: want [com], got %v", envs)
 	}
 }

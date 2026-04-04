@@ -218,8 +218,8 @@ func TestExecOrgScript_NoOrgRunner_ReturnsServiceUnavailable(t *testing.T) {
 	// Store session credentials via dev mode.
 	postRes, err := client.Post(ts.URL+"/api/auth/aws-credentials", "application/json",
 		jsonBody(t, map[string]any{
-			"access_key_id":     "AKID",
-			"secret_access_key": "secret",
+			"access_key_id":     "AKIAIOSFODNN7EXAMPLE",
+			"secret_access_key": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 			"environment":       "com",
 		}))
 	if err != nil {
@@ -265,6 +265,79 @@ func TestGetCommandStatus_MissingParams(t *testing.T) {
 		}
 	}
 }
+
+// ── POST /api/exec/jobs/{id}/resume ──────────────────────────────────────────
+
+func TestResumeJob_NotFound(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	res, err := http.Post(ts.URL+"/api/exec/jobs/9999/resume", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", res.StatusCode)
+	}
+}
+
+func TestResumeJob_NotInterrupted_ReturnsConflict(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	script := models.Script{Name: "s", Content: "echo x", ScriptType: "bash", Interpreter: "bash"}
+	if err := db.Create(&script).Error; err != nil {
+		t.Fatalf("seed script: %v", err)
+	}
+	// A completed batch cannot be resumed.
+	batch := models.ExecutionBatch{
+		ScriptID:       script.ID,
+		TotalInstances: 1,
+		Status:         models.BatchStatusCompleted,
+	}
+	if err := db.Create(&batch).Error; err != nil {
+		t.Fatalf("seed batch: %v", err)
+	}
+
+	res, err := http.Post(ts.URL+"/api/exec/jobs/"+itoa(batch.ID)+"/resume", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusConflict {
+		t.Errorf("expected 409, got %d", res.StatusCode)
+	}
+}
+
+func TestResumeJob_NoCredentials_ReturnsUnauthorized(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	script := models.Script{Name: "s", Content: "echo x", ScriptType: "bash", Interpreter: "bash"}
+	if err := db.Create(&script).Error; err != nil {
+		t.Fatalf("seed script: %v", err)
+	}
+	batch := models.ExecutionBatch{
+		ScriptID:       script.ID,
+		TotalInstances: 1,
+		Status:         models.BatchStatusInterrupted,
+	}
+	if err := db.Create(&batch).Error; err != nil {
+		t.Fatalf("seed batch: %v", err)
+	}
+
+	res, err := http.Post(ts.URL+"/api/exec/jobs/"+itoa(batch.ID)+"/resume", "application/json", nil)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", res.StatusCode)
+	}
+}
+
+// ── GET /api/aws/ssm/commands/{command_id}/status (validation paths) ──────────
 
 func TestGetCommandStatus_NoExecutionsInDB_ReturnsNotFound(t *testing.T) {
 	db := newTestDB(t)

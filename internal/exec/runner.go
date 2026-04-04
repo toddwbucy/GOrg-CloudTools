@@ -6,6 +6,7 @@ package exec
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -134,21 +135,7 @@ func (r *Runner) run(
 		}()
 	}
 	wg.Wait()
-
-	var final models.ExecutionBatch
-	if err := r.db.First(&final, batchID).Error; err != nil {
-		slog.Error("failed to load batch for final status update", "batch_id", batchID, "err", err)
-		return
-	}
-	var finalStatus models.ExecutionBatchStatus
-	if final.FailedInstances == final.TotalInstances {
-		finalStatus = models.BatchStatusFailed
-	} else {
-		finalStatus = models.BatchStatusCompleted
-	}
-	if err := r.db.Model(&final).Update("status", finalStatus).Error; err != nil {
-		slog.Error("failed to update batch final status", "batch_id", batchID, "status", finalStatus, "err", err)
-	}
+	r.finalizeBatch(batchID)
 }
 
 func (r *Runner) runOne(
@@ -212,15 +199,112 @@ func (r *Runner) runOne(
 		return
 	}
 
-	result, err := executor.WaitForDone(ctx, commandID, instanceID)
+	r.pollAndPersist(ctx, executor, batchID, exec)
+}
+
+// Resume re-attaches polling goroutines to an interrupted batch using the
+// provided AWS credentials. Returns immediately; polling continues in the
+// background. The caller should poll GET /api/exec/jobs/{id} for status.
+func (r *Runner) Resume(ctx context.Context, cfg aws.Config, batchID uint) error {
+	return r.resume(ctx, ssm.New(cfg, r.timeoutSecs), batchID)
+}
+
+// resume is the testable core of Resume — accepts an SSMExecutor so tests
+// can inject a mock without real AWS credentials.
+func (r *Runner) resume(ctx context.Context, executor SSMExecutor, batchID uint) error {
+	var batch models.ExecutionBatch
+	if err := r.db.Preload("Executions").First(&batch, batchID).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return fmt.Errorf("batch %d not found", batchID)
+		}
+		return fmt.Errorf("loading batch %d: %w", batchID, err)
+	}
+	if batch.Status != models.BatchStatusInterrupted {
+		return fmt.Errorf("batch %d cannot be resumed: status is %q (must be interrupted)", batchID, batch.Status)
+	}
+
+	if err := r.db.Model(&batch).Update("status", models.BatchStatusRunning).Error; err != nil {
+		return fmt.Errorf("marking batch %d running: %w", batchID, err)
+	}
+
+	go r.resumeRun(context.Background(), executor, &batch)
+	return nil
+}
+
+func (r *Runner) resumeRun(ctx context.Context, executor SSMExecutor, batch *models.ExecutionBatch) {
+	// Partition: executions with a command_id get re-polled; without one,
+	// SSM never received the Send so they are marked failed immediately.
+	var toResume []*models.Execution
+	for i := range batch.Executions {
+		ex := &batch.Executions[i]
+		if ex.Status != models.ExecutionStatusInterrupted {
+			continue
+		}
+		if ex.CommandID == "" {
+			now := time.Now()
+			if err := r.db.Model(ex).Updates(map[string]any{
+				"status":   models.ExecutionStatusFailed,
+				"error":    "command was not sent before server restart",
+				"end_time": &now,
+			}).Error; err != nil {
+				slog.Error("failed to mark no-command execution failed on resume", "execution_id", ex.ID, "err", err)
+			}
+			if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batch.ID).
+				UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err != nil {
+				slog.Error("failed to increment failed_instances for no-command execution", "batch_id", batch.ID, "err", err)
+			}
+			continue
+		}
+		toResume = append(toResume, ex)
+	}
+
+	if len(toResume) > 0 {
+		ch := make(chan *models.Execution, len(toResume))
+		for _, ex := range toResume {
+			ch <- ex
+		}
+		close(ch)
+
+		var wg sync.WaitGroup
+		workerCount := min(r.maxConc, len(toResume))
+		for range workerCount {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for ex := range ch {
+					r.resumeOne(ctx, executor, batch.ID, ex)
+				}
+			}()
+		}
+		wg.Wait()
+	}
+
+	r.finalizeBatch(batch.ID)
+}
+
+// resumeOne re-polls a single interrupted execution using its stored commandID.
+func (r *Runner) resumeOne(ctx context.Context, executor SSMExecutor, batchID uint, ex *models.Execution) {
+	if err := r.db.Model(ex).Update("status", models.ExecutionStatusRunning).Error; err != nil {
+		slog.Error("failed to mark execution running on resume", "execution_id", ex.ID, "err", err)
+	}
+	r.pollAndPersist(ctx, executor, batchID, ex)
+}
+
+// pollAndPersist calls WaitForDone on an already-sent command and writes the
+// final result back to the DB. Shared by runOne (after Send) and resumeOne.
+//
+// WaitForDone returns (result, nil) for ALL terminal SSM states: Success,
+// Failed, TimedOut, and Cancelled. Only "Success" counts as completed.
+func (r *Runner) pollAndPersist(ctx context.Context, executor SSMExecutor, batchID uint, ex *models.Execution) {
+	result, err := executor.WaitForDone(ctx, ex.CommandID, ex.InstanceID)
 	endTime := time.Now()
-	exec.EndTime = &endTime
+	ex.EndTime = &endTime
 
 	if err != nil {
-		exec.Status = models.ExecutionStatusFailed
-		exec.Error = err.Error()
-		if err2 := r.db.Save(exec).Error; err2 != nil {
-			slog.Error("failed to persist execution wait error", "instance", instanceID, "batch_id", batchID, "err", err2)
+		ex.Status = models.ExecutionStatusFailed
+		ex.Error = err.Error()
+		if err2 := r.db.Save(ex).Error; err2 != nil {
+			slog.Error("failed to persist execution wait error", "execution_id", ex.ID, "batch_id", batchID, "err", err2)
 		}
 		if err2 := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
 			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err2 != nil {
@@ -230,31 +314,45 @@ func (r *Runner) runOne(
 	}
 
 	exitCode := result.ExitCode
-	exec.Output = result.Output
-	exec.Error = result.Error
-	exec.ExitCode = &exitCode
+	ex.Output = result.Output
+	ex.Error = result.Error
+	ex.ExitCode = &exitCode
 
-	// WaitForDone returns (result, nil) for ALL terminal SSM states: Success,
-	// Failed, TimedOut, and Cancelled. Only "Success" counts as completed.
 	if result.Status == "Success" {
-		exec.Status = models.ExecutionStatusCompleted
-		if err := r.db.Save(exec).Error; err != nil {
-			slog.Error("failed to persist execution success", "instance", instanceID, "batch_id", batchID, "err", err)
+		ex.Status = models.ExecutionStatusCompleted
+		if err := r.db.Save(ex).Error; err != nil {
+			slog.Error("failed to persist execution success", "execution_id", ex.ID, "batch_id", batchID, "err", err)
 		}
 		if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
 			UpdateColumn("completed_instances", gorm.Expr("completed_instances + 1")).Error; err != nil {
 			slog.Error("failed to increment completed_instances", "batch_id", batchID, "err", err)
 		}
 	} else {
-		// Failed, TimedOut, Cancelled — terminal but not successful.
-		exec.Status = models.ExecutionStatusFailed
-		if err := r.db.Save(exec).Error; err != nil {
-			slog.Error("failed to persist execution terminal failure", "instance", instanceID, "batch_id", batchID, "status", result.Status, "err", err)
+		ex.Status = models.ExecutionStatusFailed
+		if err := r.db.Save(ex).Error; err != nil {
+			slog.Error("failed to persist execution terminal failure", "execution_id", ex.ID, "batch_id", batchID, "status", result.Status, "err", err)
 		}
 		if err := r.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
 			UpdateColumn("failed_instances", gorm.Expr("failed_instances + 1")).Error; err != nil {
 			slog.Error("failed to increment failed_instances after terminal failure", "batch_id", batchID, "err", err)
 		}
+	}
+}
+
+// finalizeBatch sets the batch's terminal status based on its instance counts.
+// All-failed → BatchStatusFailed; any successes → BatchStatusCompleted.
+func (r *Runner) finalizeBatch(batchID uint) {
+	var final models.ExecutionBatch
+	if err := r.db.First(&final, batchID).Error; err != nil {
+		slog.Error("failed to load batch for final status update", "batch_id", batchID, "err", err)
+		return
+	}
+	finalStatus := models.BatchStatusCompleted
+	if final.FailedInstances == final.TotalInstances {
+		finalStatus = models.BatchStatusFailed
+	}
+	if err := r.db.Model(&final).Update("status", finalStatus).Error; err != nil {
+		slog.Error("failed to update batch final status", "batch_id", batchID, "status", finalStatus, "err", err)
 	}
 }
 
