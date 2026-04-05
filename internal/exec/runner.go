@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
 )
@@ -56,9 +56,9 @@ func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (
 	return r.start(ctx, ssm.New(cfg, r.timeoutSecs), req)
 }
 
-// start is the testable core of Start. It accepts an SSMExecutor so tests
+// start is the testable core of Start. It accepts an RemoteExecutor so tests
 // can inject a mock without real AWS credentials.
-func (r *Runner) start(ctx context.Context, executor SSMExecutor, req ScriptRequest) (uint, error) {
+func (r *Runner) start(ctx context.Context, executor RemoteExecutor, req ScriptRequest) (uint, error) {
 	// Validate inputs before touching the DB or AWS.
 	if req.ScriptID != nil && req.InlineScript != "" {
 		return 0, fmt.Errorf("only one of script_id or inline_script may be provided, not both")
@@ -105,7 +105,7 @@ func (r *Runner) start(ctx context.Context, executor SSMExecutor, req ScriptRequ
 
 func (r *Runner) run(
 	ctx context.Context,
-	executor SSMExecutor,
+	executor RemoteExecutor,
 	batchID uint,
 	script *models.Script,
 	instanceIDs []string,
@@ -140,7 +140,7 @@ func (r *Runner) run(
 
 func (r *Runner) runOne(
 	ctx context.Context,
-	executor SSMExecutor,
+	executor RemoteExecutor,
 	batchID uint,
 	script *models.Script,
 	instanceID, platform string,
@@ -209,9 +209,9 @@ func (r *Runner) Resume(ctx context.Context, cfg aws.Config, batchID uint) error
 	return r.resume(ctx, ssm.New(cfg, r.timeoutSecs), batchID)
 }
 
-// resume is the testable core of Resume — accepts an SSMExecutor so tests
+// resume is the testable core of Resume — accepts an RemoteExecutor so tests
 // can inject a mock without real AWS credentials.
-func (r *Runner) resume(ctx context.Context, executor SSMExecutor, batchID uint) error {
+func (r *Runner) resume(ctx context.Context, executor RemoteExecutor, batchID uint) error {
 	var batch models.ExecutionBatch
 	if err := r.db.Preload("Executions").First(&batch, batchID).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -231,7 +231,7 @@ func (r *Runner) resume(ctx context.Context, executor SSMExecutor, batchID uint)
 	return nil
 }
 
-func (r *Runner) resumeRun(ctx context.Context, executor SSMExecutor, batch *models.ExecutionBatch) {
+func (r *Runner) resumeRun(ctx context.Context, executor RemoteExecutor, batch *models.ExecutionBatch) {
 	// Partition: executions with a command_id get re-polled; without one,
 	// SSM never received the Send so they are marked failed immediately.
 	var toResume []*models.Execution
@@ -283,7 +283,7 @@ func (r *Runner) resumeRun(ctx context.Context, executor SSMExecutor, batch *mod
 }
 
 // resumeOne re-polls a single interrupted execution using its stored commandID.
-func (r *Runner) resumeOne(ctx context.Context, executor SSMExecutor, batchID uint, ex *models.Execution) {
+func (r *Runner) resumeOne(ctx context.Context, executor RemoteExecutor, batchID uint, ex *models.Execution) {
 	if err := r.db.Model(ex).Update("status", models.ExecutionStatusRunning).Error; err != nil {
 		slog.Error("failed to mark execution running on resume", "execution_id", ex.ID, "err", err)
 	}
@@ -295,7 +295,7 @@ func (r *Runner) resumeOne(ctx context.Context, executor SSMExecutor, batchID ui
 //
 // WaitForDone returns (result, nil) for ALL terminal SSM states: Success,
 // Failed, TimedOut, and Cancelled. Only "Success" counts as completed.
-func (r *Runner) pollAndPersist(ctx context.Context, executor SSMExecutor, batchID uint, ex *models.Execution) {
+func (r *Runner) pollAndPersist(ctx context.Context, executor RemoteExecutor, batchID uint, ex *models.Execution) {
 	result, err := executor.WaitForDone(ctx, ex.CommandID, ex.InstanceID)
 	endTime := time.Now()
 	ex.EndTime = &endTime

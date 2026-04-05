@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
+	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -47,7 +47,7 @@ func newTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// mockSSMExecutor implements SSMExecutor with injectable behaviour.
+// mockSSMExecutor implements RemoteExecutor with injectable behaviour.
 type mockSSMExecutor struct {
 	sendFn      func(ctx context.Context, instanceIDs []string, script, platform string) (string, error)
 	waitForDone func(ctx context.Context, commandID, instanceID string) (*ssmtypes.InvocationStatus, error)
@@ -61,7 +61,7 @@ func (m *mockSSMExecutor) WaitForDone(ctx context.Context, commandID, instanceID
 	return m.waitForDone(ctx, commandID, instanceID)
 }
 
-// successMock returns an SSMExecutor that always succeeds.
+// successMock returns a RemoteExecutor that always succeeds.
 func successMock() *mockSSMExecutor {
 	return &mockSSMExecutor{
 		sendFn: func(_ context.Context, _ []string, _, _ string) (string, error) {

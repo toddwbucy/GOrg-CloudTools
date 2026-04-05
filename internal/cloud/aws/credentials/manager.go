@@ -25,6 +25,10 @@ type Identity struct {
 // FromSession builds an aws.Config from the credentials stored in the session.
 // Returns the config and the home region for that environment.
 // The home region is required by gorg-aws's VisitOrganization and DryRun.
+//
+// Deprecated: specific to the HTTP session/cookie auth model in cmd/server.
+// The TUI (cmd/tui, Phase 2) manages credentials directly in its model without
+// an HTTP session. Use only from cmd/server handlers.
 func FromSession(ctx context.Context, sess *middleware.Session) (aws.Config, string, error) {
 	if sess == nil {
 		return aws.Config{}, "", fmt.Errorf("no AWS credentials in session")

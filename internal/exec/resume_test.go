@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
+	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 )
 

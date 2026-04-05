@@ -25,7 +25,7 @@ worth testing independently of the real API.
 
 ## Deferred by package
 
-### `internal/aws/ssm`
+### `internal/cloud/aws/ssm`
 
 | Function | Reason |
 |---|---|
@@ -39,7 +39,7 @@ clamping) are already unit-tested in `executor_test.go`.
 
 ---
 
-### `internal/aws/ec2`
+### `internal/cloud/aws/ec2`
 
 | Function | Reason |
 |---|---|
@@ -50,7 +50,7 @@ in `instances_test.go`.
 
 ---
 
-### `internal/aws/vpc`
+### `internal/cloud/aws/vpc`
 
 | Function | Reason |
 |---|---|
@@ -60,7 +60,7 @@ The pure-logic helper (`tagsToMap`) is already unit-tested in `vpc_test.go`.
 
 ---
 
-### `internal/aws/credentials`
+### `internal/cloud/aws/credentials`
 
 | Function | Reason |
 |---|---|
@@ -79,7 +79,7 @@ unit-tested in `manager_test.go`.
 | `Runner.Resume` (happy path) | Calls `ssm.New(cfg, ...)` with real credentials; the underlying `WaitForDone` call requires a live SSM command ID in a real account. |
 
 `Runner.start`, `Runner.resume`, and `RecoverOrphanedJobs` are fully unit-tested
-via the `SSMExecutor` mock interface and an in-memory SQLite database.
+via the `RemoteExecutor` mock interface and an in-memory SQLite database.
 
 ---
 

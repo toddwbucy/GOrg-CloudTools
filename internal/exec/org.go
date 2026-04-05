@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ec2"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ec2"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	gorgaws "github.com/toddwbucy/gorg-aws"
 	"gorm.io/gorm"
