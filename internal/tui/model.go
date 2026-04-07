@@ -37,9 +37,10 @@ const (
 
 // navigateMsg asks the root model to switch to a different screen.
 type navigateMsg struct {
-	screen  Screen
-	batchID uint // non-zero when navigating to ScreenExecution
-	toolID  uint // non-zero when navigating to ScreenInstanceSelector
+	screen      Screen
+	batchID     uint     // non-zero when navigating to ScreenExecution
+	toolID      uint     // non-zero when navigating to ScreenInstanceSelector or ScreenExecution
+	instanceIDs []string // non-nil when navigating to ScreenExecution from InstanceSelector
 }
 
 // credentialsLoadedMsg is sent after a successful credential validation.
@@ -179,6 +180,8 @@ func (m *Model) screenModel(nav navigateMsg) tea.Model {
 		return newOSToolsModel(m)
 	case ScreenCloudTools:
 		return newCloudToolsModel(m)
+	case ScreenInstanceSelector:
+		return newInstanceSelectorModel(m, nav.toolID)
 	case ScreenJobHistory:
 		return newJobHistoryModel(m)
 	default:
