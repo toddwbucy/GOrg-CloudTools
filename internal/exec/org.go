@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ec2"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ec2"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	gorgaws "github.com/toddwbucy/gorg-aws"
 	"gorm.io/gorm"
@@ -147,7 +147,7 @@ func (or *OrgRunner) execInRegion(
 	or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
 		UpdateColumn("total_instances", gorm.Expr("total_instances + ?", len(targets)))
 
-	executor := ssm.New(cfg, or.timeoutSecs)
+	executor := &ssmAdapter{e: ssm.New(cfg, or.timeoutSecs)}
 
 	const maxConcPerRegion = 10
 	sem := make(chan struct{}, maxConcPerRegion)

@@ -56,14 +56,18 @@ internal/
                         change.go    — Change, ChangeInstance
 
   exec/
+    executor.go       RemoteExecutor interface (cloud-agnostic; AWS/Azure/GCP all implement this)
     runner.go         Batch script execution: resolves script, fans out SSM, writes DB
     org.go            Org-wide execution via gorg-aws visitor + runner
 
-  aws/
-    credentials/      FromSession() → aws.Config; Validate() via STS
-    ssm/              SSM SendCommand + polling (the universal execution primitive)
-    ec2/              EC2 DescribeInstances paginator
-    vpc/              DescribeVpcs/Subnets/SecurityGroups (VPC workflow primitive)
+  cloud/
+    aws/
+      credentials/    FromSession() → aws.Config (deprecated for TUI); Validate() via STS
+      ssm/            SSM SendCommand + polling (the universal execution primitive)
+      ec2/            EC2 DescribeInstances paginator
+      vpc/            DescribeVpcs/Subnets/SecurityGroups (VPC workflow primitive)
+    azure/            (stub — Phase 3)
+    gcp/              (stub — Phase 3)
 
   api/
     server.go         HTTP server, route registration (Go 1.22 ServeMux)

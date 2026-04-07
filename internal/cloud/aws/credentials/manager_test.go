@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/credentials"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/credentials"
 )
 
 // ── HomeRegion ────────────────────────────────────────────────────────────────
@@ -151,5 +151,5 @@ func TestFromSession_SessionToken_Included(t *testing.T) {
 }
 
 // Integration tests (require live AWS credentials) are in
-// internal/aws/credentials/integration_test.go and are skipped by default.
-// Run with: go test -tags integration ./internal/aws/credentials/...
+// internal/cloud/aws/credentials/integration_test.go and are skipped by default.
+// Run with: go test -tags integration ./internal/cloud/aws/credentials/...

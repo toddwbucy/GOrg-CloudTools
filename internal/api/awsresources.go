@@ -3,9 +3,9 @@ package api
 import (
 	"net/http"
 
-	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/aws/credentials"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/ec2"
-	"github.com/toddwbucy/GOrg-CloudTools/internal/aws/vpc"
+	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/credentials"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ec2"
+	"github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/vpc"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
 )
 

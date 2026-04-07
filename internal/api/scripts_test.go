@@ -443,7 +443,10 @@ func TestDeleteScript_Success(t *testing.T) {
 	}
 
 	// Confirm it is gone.
-	res2, _ := http.Get(ts.URL + "/api/scripts/" + itoa(s.ID))
+	res2, err := http.Get(ts.URL + "/api/scripts/" + itoa(s.ID))
+	if err != nil {
+		t.Fatalf("GET after delete: %v", err)
+	}
 	defer res2.Body.Close()
 	if res2.StatusCode != http.StatusNotFound {
 		t.Errorf("expected 404 after delete, got %d", res2.StatusCode)

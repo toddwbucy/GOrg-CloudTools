@@ -5,7 +5,7 @@ import (
 	"errors"
 	"net/http"
 
-	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/aws/credentials"
+	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/credentials"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/exec"

@@ -5,7 +5,6 @@ import (
 	"testing"
 	"time"
 
-	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 )
 
@@ -179,8 +178,8 @@ func TestResume_SSMTerminalFailure_MarksExecutionFailed(t *testing.T) {
 			t.Error("Send should not be called during resume")
 			return "", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
-			return &ssmtypes.InvocationStatus{Status: "TimedOut", ExitCode: -1, Done: true}, nil
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
+			return &InvocationResult{Status: "TimedOut", ExitCode: -1, Done: true}, nil
 		},
 	}
 
