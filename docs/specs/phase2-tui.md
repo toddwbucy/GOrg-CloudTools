@@ -10,7 +10,7 @@ credential management on top.
 
 ## 1. Entry point
 
-```
+```text
 cmd/tui/main.go
 ```
 
@@ -20,7 +20,7 @@ is the TUI binary, `cloudtools-server` is the optional HTTP daemon.
 
 ### Startup sequence
 
-```
+```text
 1. Open / migrate SQLite DB (same path as server: $DATABASE_URL or default)
 2. Load config from environment (reuses internal/config)
 3. Initialise bubbletea program
@@ -60,7 +60,7 @@ go mod tidy
 
 Entry point after startup.
 
-```
+```text
 ╔═ GOrg CloudTools ══════════════════════════════════╗
 ║                                                     ║
 ║   [O] OS Tools                                      ║
@@ -86,7 +86,7 @@ Cloud environment status indicators appear at the bottom of every screen:
 Triggered by `[A]` from any screen, or automatically when the user attempts
 an action that requires cloud credentials that are not yet loaded.
 
-```
+```text
 ╔═ AWS Credentials ══════════════════════════════════╗
 ║                                                     ║
 ║  Environment  [ COM ▼ ]                             ║
@@ -122,7 +122,7 @@ never written to disk. On process exit they are gone.
 
 Lists all `Tool` records with `scope = "os"`, grouped by platform.
 
-```
+```text
 ╔═ OS Tools ══════════════════════════════════════════╗
 ║                                                     ║
 ║  Linux                                              ║
@@ -150,7 +150,7 @@ Tools for providers without loaded credentials are shown dimmed with a
 `[no credentials]` label. Selecting a dimmed tool triggers the Credential
 Input modal.
 
-```
+```text
 ╔═ Cloud Tools ═══════════════════════════════════════╗
 ║                                                     ║
 ║  AWS COM  ●                                         ║
@@ -179,7 +179,7 @@ Used by OS tools (and any cloud tool that targets instances). Calls
 the table. For multi-cloud in Phase 3, the selector can aggregate instances
 across providers.
 
-```
+```text
 ╔═ Select Instances ══════════════════════════════════╗
 ║  Filter: [________________]  Platform: [Linux ▼]    ║
 ║                                                     ║
@@ -205,7 +205,7 @@ child `Execution` records on a ticker. Does NOT call SSM directly — the
 background goroutine (started by `exec.Runner.Start()`) writes to the DB;
 the TUI reads from it.
 
-```
+```text
 ╔═ Job #42 — Patching QC ════════════════════════════╗
 ║  Status: Running          Started: 14:32:07         ║
 ║  ████████░░░░░░░░░░░░  3 / 10                       ║
@@ -234,7 +234,7 @@ The job is accessible from Job History (3.8) at any time.
 
 Scrollable viewport showing stdout/stderr for a single instance execution.
 
-```
+```text
 ╔═ Output: i-0abc123 — Patching QC ══════════════════╗
 ║  Exit code: 0   Duration: 12s                       ║
 ║  ─────────────────────────────────────────────────  ║
@@ -260,7 +260,7 @@ Lists recent `ExecutionBatch` records. Shows interrupted jobs with a
 `[resume]` action that triggers the Credential Input modal if creds are
 not loaded, then calls `exec.Runner.Resume()`.
 
-```
+```text
 ╔═ Job History ═══════════════════════════════════════╗
 ║                                                     ║
 ║  ┌───┬────────────────┬──────────────┬───────────┐  ║
@@ -358,7 +358,7 @@ calls SSM directly. This keeps the TUI layer thin and testable.
 Cloud tools that return structured data (VPC recon, org accounts) render
 in a multi-pane view rather than the raw output viewer:
 
-```
+```text
 ╔═ VPC Recon — us-east-1 ════════════════════════════╗
 ║  VPC: vpc-0abc123 (my-prod-vpc)                     ║
 ║  CIDR: 10.0.0.0/16                                  ║

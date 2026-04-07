@@ -12,7 +12,7 @@ features. All existing tests must pass at the end of this phase.
 Move all AWS-specific packages under a `cloud/` namespace to make room for
 future providers without touching the `internal/` root.
 
-```
+```text
 Before                          After
 ──────────────────────────────────────────────────────
 internal/aws/credentials/   →   internal/cloud/aws/credentials/
@@ -24,7 +24,7 @@ internal/aws/vpc/           →   internal/cloud/aws/vpc/
 Stub directories for future providers (empty packages with a single doc file,
 no implementation):
 
-```
+```text
 internal/cloud/azure/   (stub)
 internal/cloud/gcp/     (stub)
 ```
@@ -48,21 +48,21 @@ three cloud providers can implement it without confusion.
 // GCP RunCommand all implement this interface.
 type RemoteExecutor interface {
     Send(ctx context.Context, instanceIDs []string, script, platform string) (commandID string, err error)
-    WaitForDone(ctx context.Context, commandID, instanceID string) (*ExecutionResult, error)
+    WaitForDone(ctx context.Context, commandID, instanceID string) (*InvocationResult, error)
 }
 ```
 
-### ExecutionResult (rename from InvocationStatus)
+### InvocationResult (renamed from ssm.InvocationStatus)
 
-`ssm.InvocationStatus` currently leaks into `exec` package via the mock
-interface. Rename to `ExecutionResult` and move it to `internal/exec/` so it
-is the canonical type across all providers. The SSM package maps its own
-internal response to this type before returning.
+`ssm.InvocationStatus` leaked into the `exec` package via the mock interface.
+It was moved to `internal/exec/` as `InvocationResult` — the canonical type
+across all providers. Provider adapters (e.g. `ssmAdapter` in `runner.go`)
+translate the cloud-specific status type to `InvocationResult` before returning.
 
 ```go
 // internal/exec/executor.go
 
-type ExecutionResult struct {
+type InvocationResult struct {
     CommandID  string
     InstanceID string
     Status     string  // "Success", "Failed", "TimedOut", "Cancelled"
@@ -73,10 +73,10 @@ type ExecutionResult struct {
 }
 ```
 
-`ssm.Executor.GetStatus()` and `ssm.Executor.WaitForDone()` return
-`*ExecutionResult` (the exec-level type) rather than `*ssm.InvocationStatus`.
-`ssm.InvocationStatus` can be removed or kept as an internal-only type — it
-should not appear in any signature outside the `ssm` package.
+`ssm.Executor.WaitForDone()` returns `*ssm.InvocationStatus` internally.
+The `ssmAdapter.WaitForDone()` wraps it and returns `*InvocationResult`.
+`ssm.InvocationStatus` stays internal to the `ssm` package and does not
+appear in any signature outside it.
 
 ---
 
@@ -122,7 +122,7 @@ filtering is needed.
 
 ## 4. Credential model — decouple from HTTP session
 
-`internal/aws/credentials` currently has two concerns:
+`internal/cloud/aws/credentials` currently has two concerns:
 
 - `FromSession()` — extracts credentials from an encrypted HTTP session cookie.
   This is HTTP/browser-specific and will be removed when the TUI is the
