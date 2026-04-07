@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/glebarez/sqlite"
-	ssmtypes "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ssm"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 	"gorm.io/gorm"
 	gormlogger "gorm.io/gorm/logger"
@@ -50,14 +49,14 @@ func newTestDB(t *testing.T) *gorm.DB {
 // mockSSMExecutor implements RemoteExecutor with injectable behaviour.
 type mockSSMExecutor struct {
 	sendFn      func(ctx context.Context, instanceIDs []string, script, platform string) (string, error)
-	waitForDone func(ctx context.Context, commandID, instanceID string) (*ssmtypes.InvocationStatus, error)
+	waitForDone func(ctx context.Context, commandID, instanceID string) (*InvocationResult, error)
 }
 
 func (m *mockSSMExecutor) Send(ctx context.Context, instanceIDs []string, script, platform string) (string, error) {
 	return m.sendFn(ctx, instanceIDs, script, platform)
 }
 
-func (m *mockSSMExecutor) WaitForDone(ctx context.Context, commandID, instanceID string) (*ssmtypes.InvocationStatus, error) {
+func (m *mockSSMExecutor) WaitForDone(ctx context.Context, commandID, instanceID string) (*InvocationResult, error) {
 	return m.waitForDone(ctx, commandID, instanceID)
 }
 
@@ -67,8 +66,8 @@ func successMock() *mockSSMExecutor {
 		sendFn: func(_ context.Context, _ []string, _, _ string) (string, error) {
 			return "cmd-test-ok", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
-			return &ssmtypes.InvocationStatus{
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
+			return &InvocationResult{
 				Status:   "Success",
 				Output:   "all good",
 				ExitCode: 0,
@@ -195,8 +194,8 @@ func TestStart_EmptyPlatformDefaultsToLinux(t *testing.T) {
 			platformCh <- platform
 			return "cmd-id", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
-			return &ssmtypes.InvocationStatus{Status: "Success", Done: true}, nil
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
+			return &InvocationResult{Status: "Success", Done: true}, nil
 		},
 	}
 
@@ -224,8 +223,8 @@ func TestStart_WindowsPlatformCaseInsensitive(t *testing.T) {
 			platformCh <- platform
 			return "cmd-id", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
-			return &ssmtypes.InvocationStatus{Status: "Success", Done: true}, nil
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
+			return &InvocationResult{Status: "Success", Done: true}, nil
 		},
 	}
 
@@ -365,7 +364,7 @@ func TestRun_SSMSendFailureIncrementsFailedInstances(t *testing.T) {
 		sendFn: func(_ context.Context, _ []string, _, _ string) (string, error) {
 			return "", fmt.Errorf("ssm: no such instance")
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
 			t.Error("WaitForDone should not be called after Send failure")
 			return nil, nil
 		},
@@ -394,8 +393,8 @@ func TestRun_TerminalFailureIncrementsFailedInstances(t *testing.T) {
 		sendFn: func(_ context.Context, _ []string, _, _ string) (string, error) {
 			return "cmd-fail", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
-			return &ssmtypes.InvocationStatus{
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
+			return &InvocationResult{
 				Status:   "Failed",
 				ExitCode: 1,
 				Done:     true,
@@ -444,10 +443,10 @@ func TestRun_WorkerPoolBoundsConc(t *testing.T) {
 			mu.Unlock()
 			return "cmd-id", nil
 		},
-		waitForDone: func(_ context.Context, _, _ string) (*ssmtypes.InvocationStatus, error) {
+		waitForDone: func(_ context.Context, _, _ string) (*InvocationResult, error) {
 			time.Sleep(20 * time.Millisecond)
 			active.Add(-1)
-			return &ssmtypes.InvocationStatus{Status: "Success", Done: true}, nil
+			return &InvocationResult{Status: "Success", Done: true}, nil
 		},
 	}
 

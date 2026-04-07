@@ -19,6 +19,31 @@ import (
 	"gorm.io/gorm"
 )
 
+// ssmAdapter adapts *ssm.Executor to the RemoteExecutor interface.
+// It translates *ssm.InvocationStatus → *InvocationResult so that the exec
+// package's core logic (Runner, OrgRunner) never imports ssm-specific types.
+type ssmAdapter struct{ e *ssm.Executor }
+
+func (a *ssmAdapter) Send(ctx context.Context, instanceIDs []string, script, platform string) (string, error) {
+	return a.e.Send(ctx, instanceIDs, script, platform)
+}
+
+func (a *ssmAdapter) WaitForDone(ctx context.Context, commandID, instanceID string) (*InvocationResult, error) {
+	s, err := a.e.WaitForDone(ctx, commandID, instanceID)
+	if err != nil {
+		return nil, err
+	}
+	return &InvocationResult{
+		CommandID:  s.CommandID,
+		InstanceID: s.InstanceID,
+		Status:     s.Status,
+		Output:     s.Output,
+		Error:      s.Error,
+		ExitCode:   s.ExitCode,
+		Done:       s.Done,
+	}, nil
+}
+
 // ScriptRequest describes a single batch script execution.
 type ScriptRequest struct {
 	// Exactly one of ScriptID or InlineScript must be set.
@@ -53,7 +78,7 @@ func New(db *gorm.DB, maxConcurrent, timeoutSecs int) *Runner {
 // and returns the batch ID immediately. The caller should poll
 // GET /api/exec/jobs/{id} for status.
 func (r *Runner) Start(ctx context.Context, cfg aws.Config, req ScriptRequest) (uint, error) {
-	return r.start(ctx, ssm.New(cfg, r.timeoutSecs), req)
+	return r.start(ctx, &ssmAdapter{e: ssm.New(cfg, r.timeoutSecs)}, req)
 }
 
 // start is the testable core of Start. It accepts an RemoteExecutor so tests
@@ -206,7 +231,7 @@ func (r *Runner) runOne(
 // provided AWS credentials. Returns immediately; polling continues in the
 // background. The caller should poll GET /api/exec/jobs/{id} for status.
 func (r *Runner) Resume(ctx context.Context, cfg aws.Config, batchID uint) error {
-	return r.resume(ctx, ssm.New(cfg, r.timeoutSecs), batchID)
+	return r.resume(ctx, &ssmAdapter{e: ssm.New(cfg, r.timeoutSecs)}, batchID)
 }
 
 // resume is the testable core of Resume — accepts an RemoteExecutor so tests

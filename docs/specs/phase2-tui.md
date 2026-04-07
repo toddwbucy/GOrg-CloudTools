@@ -27,24 +27,30 @@ is the TUI binary, `cloudtools-server` is the optional HTTP daemon.
 4. Launch main menu
 ```
 
-No listening port. No HTTP. No credential check at startup — the app is
-fully usable (browse scripts, tools, history) without any cloud credentials
-loaded.
+There is no listening port or HTTP and no credential check at startup; the
+app is fully usable (browse scripts, tools, history) without any cloud
+credentials loaded.
 
 ---
 
 ## 2. Dependencies
 
-| Package | Purpose |
-|---|---|
-| `github.com/charmbracelet/bubbletea` | TUI framework (Elm architecture) |
-| `github.com/charmbracelet/lipgloss` | Layout and styling |
-| `github.com/charmbracelet/bubbles/table` | Instance list, job list, script list |
-| `github.com/charmbracelet/bubbles/textinput` | Credential input, script editor |
-| `github.com/charmbracelet/bubbles/spinner` | Execution progress indicator |
-| `github.com/charmbracelet/bubbles/viewport` | Scrollable output viewer |
+| Package | Version | Purpose |
+|---|---|---|
+| `github.com/charmbracelet/bubbletea` | `v2.0.2` | TUI framework (Elm architecture) |
+| `github.com/charmbracelet/lipgloss` | `v2.0.2` | Layout and styling |
+| `github.com/charmbracelet/bubbles` | `v0.21.1` | table, textinput, spinner, viewport sub-packages |
 
 All Charm packages. Single maintainer, stable API, well-documented.
+
+To add when Phase 2 development begins:
+
+```bash
+go get github.com/charmbracelet/bubbletea@v2.0.2 \
+       github.com/charmbracelet/lipgloss@v2.0.2 \
+       github.com/charmbracelet/bubbles@v0.21.1
+go mod tidy
+```
 
 ---
 

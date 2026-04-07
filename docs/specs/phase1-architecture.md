@@ -143,7 +143,7 @@ The HTTP API server (`cmd/server`) is retained. Rationale:
 
 - It provides a scriptable interface to the DB and execution engine from the
   bastion without opening the TUI (useful for automation and admin queries).
-- It costs nothing to keep — it shares all packages with the TUI binary.
+- Keeping it costs nothing — it shares all packages with the TUI binary.
 - It can be disabled in deployment by simply not running it.
 
 No functional changes to `cmd/server` in Phase 1. It continues to use

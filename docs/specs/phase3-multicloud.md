@@ -30,7 +30,7 @@ applies to Azure and GCP jobs without modification.
 
 ## 2. AWS (already implemented — reference)
 
-```
+```text
 internal/cloud/aws/
     credentials/    FromSession (deprecated), Validate, HomeRegion
     ssm/            Executor implements RemoteExecutor
@@ -49,7 +49,7 @@ Credential input: Access Key ID + Secret + Session Token (temp STS creds).
 Azure Run Command (`az vm run-command invoke`) is the equivalent of SSM
 SendCommand. The Azure SDK provides this via the `armcompute` package.
 
-```
+```text
 internal/cloud/azure/
     credentials/    Azure credential management (service principal or device flow)
     runcommand/     Executor implements RemoteExecutor via az vm run-command
@@ -112,7 +112,7 @@ Engine API (`compute.instances.aggregatedList` for discovery,
 The more production-appropriate approach is **GCP OS Config agent** with
 `RunCommand`, which mirrors the SSM pattern closely.
 
-```
+```text
 internal/cloud/gcp/
     credentials/    GCP credential management (service account JSON or ADC)
     runcommand/     Executor implements RemoteExecutor via OS Config RunCommand
@@ -180,7 +180,7 @@ type Tool struct {
 The Cloud Tools screen (Phase 2, section 3.4) already renders provider
 sections as stubs:
 
-```
+```text
 Azure    ○  (coming soon)
 GCP      ○  (coming soon)
 ```
@@ -235,7 +235,7 @@ Recommended order:
 8. TUI instance selector cross-cloud aggregation
 
 Steps 1–2 can be done independently of steps 4–5. The TUI changes (7–8)
-follow after both providers have working executors.
+follow both providers having working executors.
 
 ---
 

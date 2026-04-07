@@ -2,6 +2,20 @@ package models
 
 import "gorm.io/gorm"
 
+// ToolScope constants define the two valid values for Tool.Scope.
+// Use these instead of raw strings to prevent typos.
+const (
+	// ScopeOS marks tools that run scripts on instances via the provider's
+	// remote execution agent (SSM, Azure RunCommand, GCP RunCommand). These
+	// tools are cloud-agnostic and visible regardless of which provider is active.
+	ScopeOS = "os"
+
+	// ScopeCloud marks tools that call provider APIs directly (VPC recon,
+	// org traversal). These require provider-specific credentials and are only
+	// shown when the matching provider's credentials are loaded.
+	ScopeCloud = "cloud"
+)
+
 // Script is a reusable script that can be executed on EC2 instances via SSM.
 type Script struct {
 	gorm.Model

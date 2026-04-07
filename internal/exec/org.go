@@ -147,7 +147,7 @@ func (or *OrgRunner) execInRegion(
 	or.db.Model(&models.ExecutionBatch{}).Where("id = ?", batchID).
 		UpdateColumn("total_instances", gorm.Expr("total_instances + ?", len(targets)))
 
-	executor := ssm.New(cfg, or.timeoutSecs)
+	executor := &ssmAdapter{e: ssm.New(cfg, or.timeoutSecs)}
 
 	const maxConcPerRegion = 10
 	sem := make(chan struct{}, maxConcPerRegion)
