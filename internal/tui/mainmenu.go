@@ -1,19 +1,102 @@
 package tui
 
 import (
+	"fmt"
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 )
 
-// mainMenu is a placeholder for the main menu screen.
-// The full implementation is in PR-2.
-type mainMenu struct{}
+// menuItem describes one entry in the main menu.
+type menuItem struct {
+	key    string
+	label  string
+	screen Screen
+}
 
-func newMainMenu() mainMenu { return mainMenu{} }
+var mainMenuItems = []menuItem{
+	{"O", "OS Tools", ScreenOSTools},
+	{"C", "Cloud Tools", ScreenCloudTools},
+	{"S", "Script Library", ScreenScriptLibrary},
+	{"H", "Job History", ScreenJobHistory},
+	{"X", "Changes", ScreenChanges},
+}
 
-func (m mainMenu) Init() tea.Cmd { return nil }
+// mainMenuModel is the full main menu screen.
+type mainMenuModel struct {
+	root    *Model
+	cursor  int
+}
 
-func (m mainMenu) Update(_ tea.Msg) (tea.Model, tea.Cmd) { return m, nil }
+func newMainMenuModel(root *Model) mainMenuModel {
+	return mainMenuModel{root: root}
+}
 
-func (m mainMenu) View() tea.View {
-	return tea.NewView("GOrg CloudTools — loading...\n\nPress Ctrl+C to quit.")
+func (m mainMenuModel) Init() tea.Cmd { return nil }
+
+func (m mainMenuModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		switch msg.String() {
+		case "up", "k":
+			if m.cursor > 0 {
+				m.cursor--
+			}
+		case "down", "j":
+			if m.cursor < len(mainMenuItems)-1 {
+				m.cursor++
+			}
+		case "enter", " ":
+			return m, func() tea.Msg {
+				return navigateMsg{screen: mainMenuItems[m.cursor].screen}
+			}
+		case "a", "A":
+			return m, func() tea.Msg {
+				return showCredentialModalMsg{returnTo: ScreenMainMenu}
+			}
+		case "q", "Q":
+			return m, tea.Quit
+		default:
+			// Direct key navigation (O, C, S, H, X)
+			key := strings.ToUpper(msg.String())
+			for _, item := range mainMenuItems {
+				if item.key == key {
+					return m, func() tea.Msg {
+						return navigateMsg{screen: item.screen}
+					}
+				}
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m mainMenuModel) View() tea.View {
+	var sb strings.Builder
+
+	sb.WriteString(titleStyle.Render("╔═ GOrg CloudTools ══════════════════════════════════╗"))
+	sb.WriteString("\n")
+
+	for i, item := range mainMenuItems {
+		line := fmt.Sprintf("  [%s] %-30s", item.key, item.label)
+		if i == m.cursor {
+			sb.WriteString(selectedStyle.Render("› "+line))
+		} else {
+			sb.WriteString("  " + line)
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("\n")
+	sb.WriteString("  " + m.root.statusBar())
+	sb.WriteString("\n\n")
+	sb.WriteString(helpStyle.Render("  [↑↓/jk] Navigate   [Enter] Select   [A] Credentials   [Q] Quit"))
+	sb.WriteString("\n")
+
+	if m.root.err != nil {
+		sb.WriteString("\n" + errorStyle.Render("  Error: "+m.root.err.Error()))
+		sb.WriteString("\n")
+	}
+
+	return tea.NewView(sb.String())
 }
