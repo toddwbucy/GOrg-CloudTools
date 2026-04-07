@@ -4,10 +4,6 @@ package tui
 // subsequent PRs. Each stub delegates to newPlaceholderModel so the binary
 // compiles and navigates correctly while the full screen is being built.
 
-func newCredentialInputModel(root *Model, returnTo Screen) placeholderModel {
-	return newPlaceholderModel("Credential Input — coming in PR-3\n\n[Esc] Back")
-}
-
 func newOSToolsModel(root *Model) placeholderModel {
 	return newPlaceholderModel("OS Tools — coming in PR-4\n\n[Esc] Back")
 }
