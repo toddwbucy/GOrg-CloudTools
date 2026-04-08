@@ -76,12 +76,8 @@ func (m *cloudToolsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				if !m.root.hasCredentials(provider, env) {
-					toolID := tool.ID
 					return m, func() tea.Msg {
-						return showCredentialModalMsg{
-							returnTo:      ScreenCloudTools,
-							pendingToolID: toolID,
-						}
+						return showCredentialModalMsg{returnTo: ScreenCloudTools}
 					}
 				}
 				return m, func() tea.Msg {
@@ -121,7 +117,7 @@ func (m *cloudToolsModel) View() tea.View {
 			lastPlatform = t.Platform
 			label := strings.ToUpper(t.Platform)
 			if label == "" {
-				label = "UNKNOWN"
+				label = "AWS" // empty platform defaults to AWS commercial (see cloudProvider)
 			}
 			if provErr != nil {
 				label = "UNSUPPORTED (" + t.Platform + ")"
