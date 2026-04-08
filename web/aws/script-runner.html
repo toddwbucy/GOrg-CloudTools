@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Script Runner</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom-theme.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Integrated Brand Header -->
+    <header class="main-header">
+        <div class="container">
+            <div class="brand-section text-center">
+                <h1 class="main-brand">
+                    <span style="color: var(--brand-primary);">CloudOpsTools</span>
+                </h1>
+                <div class="client-badge">
+                    <i class="bi bi-building"></i> Multi-Cloud Operations Platform
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Enhanced Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link " href="/">
+                            <i class="bi bi-house-fill me-2"></i>Dashboard
+                        </a>
+                    </li>
+
+                    <!-- AWS Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle" type="button" id="awsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-cloud me-2"></i>AWS Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="awsDropdown">
+                            <li><a class="dropdown-item" href="/aws/linux-qc-prep">
+                                <i class="bi bi-linux me-2"></i>Linux QC Patching Prep
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/linux-qc-post">
+                                <i class="bi bi-check-circle me-2"></i>Linux QC Patching Post
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/sft-fixer">
+                                <i class="bi bi-wrench me-2"></i>SFT Fixer
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/script-runner">
+                                <i class="bi bi-terminal me-2"></i>Script Runner
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/vpc-recon">
+                                <i class="bi bi-diagram-3 me-2"></i>VPC Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/disk-recon">
+                                <i class="bi bi-hdd me-2"></i>Disk Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/rhsa-compliance">
+                                <i class="bi bi-patch-check me-2"></i>RHSA Compliance
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/decom-survey">
+                                <i class="bi bi-trash3 me-2"></i>Decom Survey
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/aws/tools">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>All AWS Tools
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: Azure Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="azureDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-microsoft me-2"></i>Azure Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="azureDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: GCP Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="gcpDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-google me-2"></i>GCP Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="gcpDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: ServiceNow Integration -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="servicenowDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-2"></i>ServiceNow
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="servicenowDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <button class="btn btn-link nav-link theme-switcher"
+                                id="theme-toggle"
+                                role="switch"
+                                aria-checked="true"
+                                aria-label="Toggle theme, currently Dark Mode"
+                                title="Toggle theme">
+                            <i class="bi bi-moon-stars-fill" id="theme-icon" aria-hidden="true"></i>
+                            <span class="theme-text">Light Mode</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <i class="bi bi-person-circle me-2"></i>Profile
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-4">
+        <!-- Flash messages -->
+
+        <!-- Main content -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h1 class="mb-4">
+                <i class="bi bi-terminal-fill me-2"></i>AWS Script Runner
+            </h1>
+
+            <!-- Credentials Section -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>AWS Credentials</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-shield-lock me-2"></i>Set GOV Credentials
+                            </a>
+                            <span id="gov-creds-status" class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-cloud me-2"></i>Set COM Credentials
+                            </a>
+                            <span id="com-creds-status" class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Change Management Section -->
+<!-- AWS Shared Change Management Component -->
+<!-- Usage: include "aws/shared/change_management.html" -->
+<!-- Requires: tool_name variable to be set (e.g., 'script-runner' or 'linux-patcher') -->
+
+<div class="card mb-3">
+    <div class="card-header bg-primary text-white">
+        <h5 class="mb-0"><i class="bi bi-folder-open me-2"></i>Change Management</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <!-- Select/Load Column -->
+            <div class="col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header bg-primary text-white">
+                        <h6 class="mb-0">Select Change</h6>
+                    </div>
+                    <div class="card-body">
+                        <select class="form-select mb-2" id="change-select">
+                            <option value="">Select a change...</option>
+                        </select>
+                        <button class="btn btn-primary w-100 mb-2" onclick="loadSelectedChange()">
+                            <i class="bi bi-download me-1"></i>Load Change
+                        </button>
+                        <div class="btn-group w-100" role="group">
+                            <button class="btn btn-outline-secondary" onclick="refreshChangeList()">
+                                <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Upload CSV Column -->
+            <div class="col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header bg-success text-white">
+                        <h6 class="mb-0">Upload CSV</h6>
+                    </div>
+                    <div class="card-body">
+                        <form id="change-csv-upload-form" method="POST" enctype="multipart/form-data">
+                            <div class="mb-2">
+                                <input type="file" class="form-control" id="change-csv-file" name="file" accept=".csv" required>
+                                <div class="form-text small">Required: change_number, platform, region, account_id, instance_id</div>
+                            </div>
+                            <button type="submit" class="btn btn-success w-100">
+                                <i class="bi bi-upload me-1"></i>Upload CSV
+                            </button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Manual Entry Column -->
+            <div class="col-lg-4 mb-3">
+                <div class="card h-100">
+                    <div class="card-header bg-warning text-dark">
+                        <h6 class="mb-0">Manual Entry</h6>
+                    </div>
+                    <div class="card-body">
+                        <input type="text" class="form-control mb-2" id="manual-change-number" placeholder="Change Number" >
+                        <textarea class="form-control mb-2" id="manual-change-description" rows="2" placeholder="Description (Optional)" ></textarea>
+                        <hr class="my-2">
+                        <h6 class="small text-muted">Add Instance</h6>
+                        <div class="row g-1 mb-2">
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="manual-instance-id" placeholder="Instance ID" >
+                            </div>
+                            <div class="col-6">
+                                <input type="text" class="form-control form-control-sm" id="manual-account-id" placeholder="Account ID" >
+                            </div>
+                        </div>
+                        <div class="row g-1 mb-2">
+                            <div class="col-6">
+                                <select class="form-select form-select-sm" id="manual-region" >
+                                    <option value="">Region</option>
+                                    <option value="us-east-1">us-east-1</option>
+                                    <option value="us-east-2">us-east-2</option>
+                                    <option value="us-west-1">us-west-1</option>
+                                    <option value="us-west-2">us-west-2</option>
+                                    <option value="us-gov-west-1">us-gov-west-1</option>
+                                    <option value="us-gov-east-1">us-gov-east-1</option>
+                                </select>
+                            </div>
+                            <div class="col-6">
+                                <select class="form-select form-select-sm" id="manual-platform" >
+                                    <option value="">Platform</option>
+                                    <option value="linux">Linux</option>
+                                    <option value="windows">Windows</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button class="btn btn-warning btn-sm w-100 mb-1" onclick="addManualInstance()" >
+                            <i class="bi bi-plus-circle me-1"></i>Add Instance
+                        </button>
+                        <button class="btn btn-success btn-sm w-100" id="save-manual-change-btn" onclick="saveManualChange()" disabled>
+                            <i class="bi bi-save me-1"></i>Save Change
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Current Change Display -->
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="alert alert-warning mb-0">
+                    <i class="bi bi-info-circle me-1"></i>No change loaded. Select from list, upload CSV, or add manually.
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Manual Instances Preview (hidden by default) -->
+<div id="manual-instances-preview" style="display: none; width: 300px; z-index: 1050;" class="position-fixed bottom-0 end-0 m-3 card">
+    <div class="card-header bg-warning text-dark">
+        <h6 class="mb-0">Instances to Add</h6>
+    </div>
+    <div class="card-body" style="max-height: 300px; overflow-y: auto;">
+        <div id="manual-instances-list" class="list-group">
+            <!-- Instances will be added here -->
+        </div>
+    </div>
+</div>
+
+<!-- Include external change management script -->
+<script src="/static/js/change-management.js"></script>
+<script>
+// Initialize change management with the tool-specific endpoint
+// The tool_endpoint variable should be provided by the server template context
+const toolEndpoint = "/aws/script-runner";
+initChangeManagement(toolEndpoint);
+</script>
+            <!-- Connectivity Confirmation -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-wifi me-2"></i>Connectivity Confirmation</h5>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted">Confirm that all instances in the change are powered on and accessible before executing scripts.</p>
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div id="connectivity-results" class="alert alert-secondary">
+                                <i class="bi bi-info-circle me-1"></i>Click "Confirm Connectivity" to verify all instances are online
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-info w-100" onclick="testConnectivity()"
+disabled id="test-connectivity-btn">
+                                <i class="bi bi-wifi me-2"></i>Confirm Connectivity
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Instance Selector -->
+<!-- AWS Shared Instance Selector Component -->
+
+<div class="card mb-3">
+    <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+        <h5 class="mb-0">
+            <i class="bi bi-list-check me-2"></i>
+            Instance Selection
+        </h5>
+        <span class="badge bg-light text-dark small">
+            Select which instances will be included in this execution
+        </span>
+    </div>
+    <div class="card-body">
+        <!-- InstanceSelector renders into this div -->
+        <div id="instance-selector-body"></div>
+    </div>
+</div>
+
+<script src="/static/js/instance-selector.js"></script>
+            <!-- Script Input Section -->
+            <div class="card mb-3">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0"><i class="bi bi-code-square me-2"></i>Script Configuration</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-9">
+                            <!-- Script Library Dropdown (if scripts exist) -->
+                            <div class="mb-3" id="library-section" style="display: none;">
+                                <label class="form-label fw-bold">
+                                    <i class="bi bi-collection me-1"></i>Load from Library
+                                </label>
+                                <div class="input-group">
+                                    <select id="library-select" class="form-select">
+                                        <option value="">-- Select saved script --</option>
+                                    </select>
+                                    <button class="btn btn-outline-primary" onclick="loadFromLibrary()">
+                                        <i class="bi bi-upload me-1"></i>Load
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Script Name -->
+                            <div class="mb-3">
+                                <label for="script-name" class="form-label fw-bold">Script Name</label>
+                                <input type="text" id="script-name" class="form-control"
+                                       placeholder="e.g., Disk Space Check">
+                                <small class="form-text text-muted">Give your script a descriptive name for reference</small>
+                            </div>
+
+                            <!-- Interpreter -->
+                            <div class="mb-3">
+                                <label for="interpreter" class="form-label fw-bold">
+                                    Interpreter <span class="text-danger">*</span>
+                                </label>
+                                <select id="interpreter" class="form-select">
+                                    <option value="bash" selected>Bash (Linux/Unix)</option>
+                                    <option value="python3">Python 3</option>
+                                    <option value="powershell">PowerShell (Windows)</option>
+                                    <option value="sh">Shell (POSIX sh)</option>
+                                </select>
+                                <small class="form-text text-muted">Select the script interpreter to use</small>
+                            </div>
+
+                            <!-- Script Content -->
+                            <div class="mb-3">
+                                <label for="script-content" class="form-label fw-bold">
+                                    Script Content <span class="text-danger">*</span>
+                                </label>
+                                <textarea id="script-content" class="form-control font-monospace"
+                                          rows="12" placeholder="#!/bin/bash&#10;echo 'Hello from Script Runner'&#10;hostname&#10;df -h"></textarea>
+                                <small class="form-text text-muted">Enter the script to execute on all selected instances</small>
+                            </div>
+
+                            <!-- Script Description (Optional) -->
+                            <div class="mb-3">
+                                <label for="script-description" class="form-label fw-bold">Description (Optional)</label>
+                                <input type="text" id="script-description" class="form-control"
+                                       placeholder="Brief description of what this script does">
+                            </div>
+
+                            <!-- Save to Library Checkbox -->
+                            <div class="form-check mb-3">
+                                <input class="form-check-input" type="checkbox" id="save-to-library">
+                                <label class="form-check-label" for="save-to-library">
+                                    <i class="bi bi-bookmark-star me-1"></i>Save this script to library for reuse
+                                </label>
+                            </div>
+
+                            <!-- Validation Button -->
+                            <button class="btn btn-outline-primary" onclick="validateScript()">
+                                <i class="bi bi-check-circle me-1"></i>Validate Script
+                            </button>
+                            <div id="validation-results" class="mt-2"></div>
+                        </div>
+
+                        <div class="col-md-3">
+                            <!-- Execute Button -->
+                            <button class="btn btn-success btn-lg w-100 mb-2"
+                                    id="execute-btn" onclick="executeScript()" disabled>
+                                <i class="bi bi-play-circle me-2"></i>Execute Script
+                            </button>
+                            <small class="text-muted" id="execute-status">
+                                Enter script and select instances
+                            </small>
+
+                            <!-- Quick Tips -->
+                            <div class="card mt-3 bg-light">
+                                <div class="card-body p-2">
+                                    <h6 class="card-title mb-1"><i class="bi bi-lightbulb me-1"></i>Quick Tips</h6>
+                                    <ul class="mb-0 small">
+                                        <li>Scripts run with SSM user permissions</li>
+                                        <li>Use full paths for commands</li>
+                                        <li>Test scripts on a single instance first</li>
+                                        <li>Avoid destructive operations</li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Execution Results Section -->
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5 class="mb-0"><i class="bi bi-list-task me-2"></i>Execution Results</h5>
+                </div>
+                <div class="card-body">
+                    <div id="execution-status" class="mb-3">
+                        <div class="alert alert-secondary">
+                            <i class="bi bi-info-circle me-1"></i>No execution in progress. Configure and execute a script above to see results.
+                        </div>
+                    </div>
+                    <div id="execution-results"></div>
+
+                    <!-- Download Section (Hidden until results are available) -->
+                    <div id="download-section" style="display: none;" class="mt-3">
+                        <hr>
+                        <h6><i class="bi bi-download me-2"></i>Download Results</h6>
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-success" onclick="downloadResults('csv')">
+                                <i class="bi bi-file-earmark-spreadsheet me-1"></i>CSV
+                            </button>
+                            <button class="btn btn-outline-success" onclick="downloadResults('json')">
+                                <i class="bi bi-file-code me-1"></i>JSON
+                            </button>
+                            <button class="btn btn-outline-success" onclick="downloadResults('text')">
+                                <i class="bi bi-file-text me-1"></i>Text Report
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>CloudOpsTools</h5>
+                    <p class="mb-2">Empowering digital transformation through expert cloud solutions</p>
+                    <small style="color: rgba(255,255,255,0.8);">Multi-Cloud Operations Platform</small>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                        <span style="color: var(--brand-primary); font-weight: bold;">CloudOpsTools</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/theme-switcher.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/main.js"></script>
+
+    <!-- Toast notification utility -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <script>
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('liveToast');
+        const toastBody = toast.querySelector('.toast-body');
+        const toastHeader = toast.querySelector('.toast-header');
+
+        // Set message
+        toastBody.textContent = message;
+
+        // Set type styling
+        toast.className = 'toast';
+        if (type === 'success') {
+            toast.classList.add('bg-success', 'text-white');
+            toastHeader.classList.add('bg-success', 'text-white');
+        } else if (type === 'danger' || type === 'error') {
+            toast.classList.add('bg-danger', 'text-white');
+            toastHeader.classList.add('bg-danger', 'text-white');
+        } else if (type === 'warning') {
+            toast.classList.add('bg-warning');
+            toastHeader.classList.add('bg-warning');
+        } else {
+            toast.classList.add('bg-info', 'text-white');
+            toastHeader.classList.add('bg-info', 'text-white');
+        }
+
+        // Show toast
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+    </script>
+
+<script>
+</script>
+<script src="/static/js/script-runner.js"></script>
+
+    
+</body>
+</html>

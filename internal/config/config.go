@@ -26,6 +26,7 @@ type Config struct {
 	Host        string
 	Port        int
 	StaticDir   string
+	WebDir      string
 	CORSOrigins []string
 
 	AWSDefaultRegion      string
@@ -68,6 +69,7 @@ func Load() (*Config, error) {
 		Host:                    getEnv("HOST", "0.0.0.0"),
 		Port:                    getIntEnv("PORT", 8500),
 		StaticDir:               getEnv("STATIC_DIR", "./static"),
+		WebDir:                  getEnv("WEB_DIR", "./web"),
 		CORSOrigins:             getCORSOrigins(env),
 		AWSDefaultRegion:        getEnv("AWS_DEFAULT_REGION", "us-east-1"),
 		AWSAccessKeyIDCOM:       os.Getenv("AWS_ACCESS_KEY_ID_COM"),

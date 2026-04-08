@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EC2 Decom Survey</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom-theme.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Integrated Brand Header -->
+    <header class="main-header">
+        <div class="container">
+            <div class="brand-section text-center">
+                <h1 class="main-brand">
+                    <span style="color: var(--brand-primary);">CloudOpsTools</span>
+                </h1>
+                <div class="client-badge">
+                    <i class="bi bi-building"></i> Multi-Cloud Operations Platform
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Enhanced Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link " href="/">
+                            <i class="bi bi-house-fill me-2"></i>Dashboard
+                        </a>
+                    </li>
+
+                    <!-- AWS Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle" type="button" id="awsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-cloud me-2"></i>AWS Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="awsDropdown">
+                            <li><a class="dropdown-item" href="/aws/linux-qc-prep">
+                                <i class="bi bi-linux me-2"></i>Linux QC Patching Prep
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/linux-qc-post">
+                                <i class="bi bi-check-circle me-2"></i>Linux QC Patching Post
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/sft-fixer">
+                                <i class="bi bi-wrench me-2"></i>SFT Fixer
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/script-runner">
+                                <i class="bi bi-terminal me-2"></i>Script Runner
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/vpc-recon">
+                                <i class="bi bi-diagram-3 me-2"></i>VPC Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/disk-recon">
+                                <i class="bi bi-hdd me-2"></i>Disk Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/rhsa-compliance">
+                                <i class="bi bi-patch-check me-2"></i>RHSA Compliance
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/decom-survey">
+                                <i class="bi bi-trash3 me-2"></i>Decom Survey
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/aws/tools">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>All AWS Tools
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: Azure Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="azureDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-microsoft me-2"></i>Azure Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="azureDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: GCP Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="gcpDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-google me-2"></i>GCP Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="gcpDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: ServiceNow Integration -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="servicenowDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-2"></i>ServiceNow
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="servicenowDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <button class="btn btn-link nav-link theme-switcher"
+                                id="theme-toggle"
+                                role="switch"
+                                aria-checked="true"
+                                aria-label="Toggle theme, currently Dark Mode"
+                                title="Toggle theme">
+                            <i class="bi bi-moon-stars-fill" id="theme-icon" aria-hidden="true"></i>
+                            <span class="theme-text">Light Mode</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <i class="bi bi-person-circle me-2"></i>Profile
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-4">
+        <!-- Flash messages -->
+
+        <!-- Main content -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h1 class="mb-4">
+                <i class="bi bi-trash3-fill me-2"></i>EC2 Decom Survey
+                <small class="text-muted fs-6 ms-2">Pre-decommission recon &amp; blocker analysis</small>
+            </h1>
+
+            <!-- Credentials -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>AWS Credentials</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-shield-lock me-2"></i>Set GOV Credentials
+                            </a>
+                            <span class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-cloud me-2"></i>Set COM Credentials
+                            </a>
+                            <span class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Target Instance -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-pc-display me-2"></i>Target Instance</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 align-items-end">
+
+                        <div class="col-md-2">
+                            <label for="environment" class="form-label fw-bold">Environment</label>
+                            <select id="environment" class="form-select" onchange="onEnvChange()">
+                                <option value="com">COM</option>
+                                <option value="gov">GOV</option>
+                            </select>
+                        </div>
+
+                        <div class="col-md-2">
+                            <label for="region" class="form-label fw-bold">Region</label>
+                            <select id="region" class="form-select"></select>
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="account-id" class="form-label fw-bold">Account ID</label>
+                            <input type="text" id="account-id" class="form-control font-monospace"
+                                   placeholder="123456789012" maxlength="12">
+                        </div>
+
+                        <div class="col-md-3">
+                            <label for="instance-id" class="form-label fw-bold">Instance ID</label>
+                            <input type="text" id="instance-id" class="form-control font-monospace"
+                                   placeholder="i-0abc123def456789a">
+                        </div>
+
+                        <div class="col-md-2">
+                            <button class="btn btn-info btn-lg w-100" id="scan-btn" onclick="runScan()">
+                                <i class="bi bi-search me-2"></i>Run Survey
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div id="scan-progress" style="display:none;" class="d-flex align-items-center gap-2">
+                                <div class="spinner-border spinner-border-sm text-info"></div>
+                                <span class="text-muted">Scanning AWS APIs — this may take 10-30 seconds for large accounts…</span>
+                            </div>
+                            <div id="scan-error" class="alert alert-danger mb-0 py-2 px-3"
+                                 style="display:none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Summary Cards -->
+            <div id="summary-section" style="display:none;">
+                <div class="row mb-3" id="summary-cards"></div>
+            </div>
+
+            <!-- Report -->
+            <div id="results-section" style="display:none;">
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <h5 class="mb-0">
+                            <i class="bi bi-file-earmark-text me-2"></i>Decom Survey Report
+                            <span id="result-badge" class="badge ms-2"></span>
+                        </h5>
+                        <button class="btn btn-sm btn-success" id="download-btn"
+                                onclick="downloadReport()" style="display:none;">
+                            <i class="bi bi-download me-1"></i>Download .md
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <pre id="report-output"
+                             class="m-0 p-3"
+                             style="max-height:70vh; overflow-y:auto; font-size:0.78rem;
+                                    white-space:pre-wrap; word-break:break-word;
+                                    background:var(--bs-dark); color:var(--bs-light);"></pre>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>CloudOpsTools</h5>
+                    <p class="mb-2">Empowering digital transformation through expert cloud solutions</p>
+                    <small style="color: rgba(255,255,255,0.8);">Multi-Cloud Operations Platform</small>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                        <span style="color: var(--brand-primary); font-weight: bold;">CloudOpsTools</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/theme-switcher.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/main.js"></script>
+
+    <!-- Toast notification utility -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <script>
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('liveToast');
+        const toastBody = toast.querySelector('.toast-body');
+        const toastHeader = toast.querySelector('.toast-header');
+
+        // Set message
+        toastBody.textContent = message;
+
+        // Set type styling
+        toast.className = 'toast';
+        if (type === 'success') {
+            toast.classList.add('bg-success', 'text-white');
+            toastHeader.classList.add('bg-success', 'text-white');
+        } else if (type === 'danger' || type === 'error') {
+            toast.classList.add('bg-danger', 'text-white');
+            toastHeader.classList.add('bg-danger', 'text-white');
+        } else if (type === 'warning') {
+            toast.classList.add('bg-warning');
+            toastHeader.classList.add('bg-warning');
+        } else {
+            toast.classList.add('bg-info', 'text-white');
+            toastHeader.classList.add('bg-info', 'text-white');
+        }
+
+        // Show toast
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+    </script>
+
+<script>
+window.addEventListener('DOMContentLoaded', () => { onEnvChange(); });
+</script>
+<script src="/static/js/decom-survey.js"></script>
+
+    
+</body>
+</html>

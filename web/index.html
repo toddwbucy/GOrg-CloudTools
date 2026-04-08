@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home - PCM-Ops Tools</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom-theme.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Integrated Brand Header -->
+    <header class="main-header">
+        <div class="container">
+            <div class="brand-section text-center">
+                <h1 class="main-brand">
+                    <span style="color: var(--brand-primary);">CloudOpsTools</span>
+                </h1>
+                <div class="client-badge">
+                    <i class="bi bi-building"></i> Multi-Cloud Operations Platform
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Enhanced Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link " href="/">
+                            <i class="bi bi-house-fill me-2"></i>Dashboard
+                        </a>
+                    </li>
+
+                    <!-- AWS Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle" type="button" id="awsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-cloud me-2"></i>AWS Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="awsDropdown">
+                            <li><a class="dropdown-item" href="/aws/linux-qc-prep">
+                                <i class="bi bi-linux me-2"></i>Linux QC Patching Prep
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/linux-qc-post">
+                                <i class="bi bi-check-circle me-2"></i>Linux QC Patching Post
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/sft-fixer">
+                                <i class="bi bi-wrench me-2"></i>SFT Fixer
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/script-runner">
+                                <i class="bi bi-terminal me-2"></i>Script Runner
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/vpc-recon">
+                                <i class="bi bi-diagram-3 me-2"></i>VPC Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/disk-recon">
+                                <i class="bi bi-hdd me-2"></i>Disk Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/rhsa-compliance">
+                                <i class="bi bi-patch-check me-2"></i>RHSA Compliance
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/decom-survey">
+                                <i class="bi bi-trash3 me-2"></i>Decom Survey
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/aws/tools">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>All AWS Tools
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: Azure Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="azureDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-microsoft me-2"></i>Azure Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="azureDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: GCP Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="gcpDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-google me-2"></i>GCP Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="gcpDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: ServiceNow Integration -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="servicenowDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-2"></i>ServiceNow
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="servicenowDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <button class="btn btn-link nav-link theme-switcher"
+                                id="theme-toggle"
+                                role="switch"
+                                aria-checked="true"
+                                aria-label="Toggle theme, currently Dark Mode"
+                                title="Toggle theme">
+                            <i class="bi bi-moon-stars-fill" id="theme-icon" aria-hidden="true"></i>
+                            <span class="theme-text">Light Mode</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <i class="bi bi-person-circle me-2"></i>Profile
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-4">
+        <!-- Flash messages -->
+
+        <!-- Main content -->
+<!-- Hero Section -->
+<section class="hero-section">
+    <div class="container hero-content">
+        <div class="row justify-content-center">
+            <div class="col-lg-10 text-center">
+                <h2 class="hero-title">Multi-Cloud Operations Platform</h2>
+                <p class="hero-subtitle">Streamlined cloud operations and automation tools designed for enterprise-scale infrastructure management with professional-grade security.</p>
+                <div class="partnership-badge">
+                    Rackspace Technology × Texas DIR Partnership
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Main Content -->
+<main class="container my-4">
+    <div class="row">
+        <!-- AWS Tools Card -->
+        <div class="col-md-4">
+            <div class="tool-card">
+                <div class="tool-icon">
+                    <i class="bi bi-cloud"></i>
+                </div>
+                <h4 class="tool-title">AWS Operations</h4>
+                <p class="tool-description">Comprehensive AWS tools including Linux QC patching, SFT fixes, and secure multi-account script execution with detailed compliance reporting.</p>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-active"></div>
+                        <small class="text-secondary-custom">Linux QC Patching Tools</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-active"></div>
+                        <small class="text-secondary-custom">SFT Fixer & Validation</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-active"></div>
+                        <small class="text-secondary-custom">Multi-Account Operations</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-indicator status-active"></div>
+                        <small class="text-secondary-custom">Secure Backend Execution</small>
+                    </div>
+                </div>
+                <a href="/aws/tools" class="btn btn-primary">
+                    <i class="bi bi-play-circle me-2"></i>Launch AWS Tools
+                </a>
+            </div>
+        </div>
+
+        <!-- Azure Tools Card -->
+        <div class="col-md-4">
+            <div class="tool-card">
+                <div class="tool-icon">
+                    <i class="bi bi-microsoft"></i>
+                </div>
+                <h4 class="tool-title">Azure Operations</h4>
+                <p class="tool-description">Azure resource management and automation tools for enterprise environments with integrated authentication and comprehensive monitoring capabilities.</p>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Authentication Management</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Resource Management</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Automation Tools</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-indicator status-warning"></div>
+                        <small class="text-muted-custom">Coming Soon</small>
+                    </div>
+                </div>
+                <button class="btn btn-secondary" disabled>
+                    <i class="bi bi-clock me-2"></i>Preview Mode
+                </button>
+            </div>
+        </div>
+
+        <!-- GCP Tools Card -->
+        <div class="col-md-4">
+            <div class="tool-card">
+                <div class="tool-icon">
+                    <i class="bi bi-google"></i>
+                </div>
+                <h4 class="tool-title">Google Cloud Operations</h4>
+                <p class="tool-description">Google Cloud Platform management tools for project administration, service operations, and automated infrastructure management across GCP environments.</p>
+                <div class="mb-3">
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Project Management</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Service Operations</small>
+                    </div>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="status-indicator status-inactive"></div>
+                        <small class="text-muted-custom">Infrastructure Automation</small>
+                    </div>
+                    <div class="d-flex align-items-center">
+                        <div class="status-indicator status-warning"></div>
+                        <small class="text-muted-custom">Coming Soon</small>
+                    </div>
+                </div>
+                <button class="btn btn-success" disabled>
+                    <i class="bi bi-clock me-2"></i>Preview Mode
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- ServiceNow Integration Section -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="tool-card">
+                <div class="row align-items-center">
+                    <div class="col-md-2 text-center">
+                        <div class="tool-icon mx-auto" style="width: 64px; height: 64px; font-size: 2rem;">
+                            <i class="bi bi-diagram-3"></i>
+                        </div>
+                    </div>
+                    <div class="col-md-7">
+                        <h4 class="tool-title">ServiceNow Integration</h4>
+                        <p class="tool-description mb-3">Integrate cloud operations with ServiceNow for change management, CMDB updates, and incident tracking across all cloud platforms.</p>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <small class="text-secondary-custom">Automatic CMDB updates</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <small class="text-secondary-custom">Change request management</small>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-check-circle-fill text-success me-2"></i>
+                                    <small class="text-secondary-custom">Incident integration</small>
+                                </div>
+                                <div class="d-flex align-items-center mb-2">
+                                    <i class="bi bi-clock text-warning me-2"></i>
+                                    <small class="text-muted-custom">Full integration coming soon</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3 text-center">
+                        <button class="btn btn-secondary" disabled>
+                            <i class="bi bi-tools me-2"></i>Preview Integration
+                        </button>
+                        <div class="mt-2">
+                            <small class="text-muted-custom">Available in future release</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</main>
+
+<script>
+// Add subtle animations to cards on scroll
+document.addEventListener('DOMContentLoaded', function() {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('slide-up');
+            }
+        });
+    }, observerOptions);
+
+    document.querySelectorAll('.tool-card').forEach(card => {
+        observer.observe(card);
+    });
+});
+</script>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>CloudOpsTools</h5>
+                    <p class="mb-2">Empowering digital transformation through expert cloud solutions</p>
+                    <small style="color: rgba(255,255,255,0.8);">Multi-Cloud Operations Platform</small>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                        <span style="color: var(--brand-primary); font-weight: bold;">CloudOpsTools</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/theme-switcher.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/main.js"></script>
+
+    <!-- Toast notification utility -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <script>
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('liveToast');
+        const toastBody = toast.querySelector('.toast-body');
+        const toastHeader = toast.querySelector('.toast-header');
+
+        // Set message
+        toastBody.textContent = message;
+
+        // Set type styling
+        toast.className = 'toast';
+        if (type === 'success') {
+            toast.classList.add('bg-success', 'text-white');
+            toastHeader.classList.add('bg-success', 'text-white');
+        } else if (type === 'danger' || type === 'error') {
+            toast.classList.add('bg-danger', 'text-white');
+            toastHeader.classList.add('bg-danger', 'text-white');
+        } else if (type === 'warning') {
+            toast.classList.add('bg-warning');
+            toastHeader.classList.add('bg-warning');
+        } else {
+            toast.classList.add('bg-info', 'text-white');
+            toastHeader.classList.add('bg-info', 'text-white');
+        }
+
+        // Show toast
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+    </script>
+
+<script>
+// Add subtle animations to cards on scroll
+document.addEventListener('DOMContentLoaded', function() {
+    const observerOptions = {
+        threshold: 0.1,
+        rootMargin: '0px 0px -50px 0px'
+    };
+
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('slide-up');
+            }
+        });
+    }, observerOptions);
+
+    document.querySelectorAll('.tool-card').forEach(card => {
+        observer.observe(card);
+    });
+});
+</script>
+
+    
+</body>
+</html>
