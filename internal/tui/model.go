@@ -184,8 +184,6 @@ func (m *Model) screenModel(nav navigateMsg) tea.Model {
 	switch nav.screen {
 	case ScreenMainMenu:
 		return newMainMenuModel(m)
-	case ScreenCredentialInput:
-		return newCredentialInputModel(m, nav.screen, 0)
 	case ScreenOSTools:
 		return newOSToolsModel(m)
 	case ScreenCloudTools:

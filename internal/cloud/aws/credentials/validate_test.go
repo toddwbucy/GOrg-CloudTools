@@ -43,7 +43,7 @@ func TestValidAWSKeyID_InvalidCharsInSuffix(t *testing.T) {
 	}
 }
 
-func TestContainsXSS_Detected(t *testing.T) {
+func TestContainsKnownXSSPattern_Detected(t *testing.T) {
 	patterns := []string{
 		"<script>alert(1)</script>",
 		"javascript:void(0)",
@@ -55,13 +55,13 @@ func TestContainsXSS_Detected(t *testing.T) {
 		"<SCRIPT>ALERT(1)</SCRIPT>", // uppercase
 	}
 	for _, p := range patterns {
-		if !credentials.ContainsXSS(p) {
+		if !credentials.ContainsKnownXSSPattern(p) {
 			t.Errorf("expected XSS detected in %q", p)
 		}
 	}
 }
 
-func TestContainsXSS_Clean(t *testing.T) {
+func TestContainsKnownXSSPattern_Clean(t *testing.T) {
 	clean := []string{
 		"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
 		"AQoDYXdzEJr//some/session/token+with=chars",
@@ -69,7 +69,7 @@ func TestContainsXSS_Clean(t *testing.T) {
 		"",
 	}
 	for _, s := range clean {
-		if credentials.ContainsXSS(s) {
+		if credentials.ContainsKnownXSSPattern(s) {
 			t.Errorf("expected clean (no XSS) for %q", s)
 		}
 	}

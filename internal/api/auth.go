@@ -43,11 +43,11 @@ func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "access_key_id format is invalid", http.StatusBadRequest)
 		return
 	}
-	if awscreds.ContainsXSS(req.SecretAccessKey) {
+	if awscreds.ContainsKnownXSSPattern(req.SecretAccessKey) {
 		jsonError(w, "secret_access_key contains invalid characters", http.StatusBadRequest)
 		return
 	}
-	if req.SessionToken != "" && awscreds.ContainsXSS(req.SessionToken) {
+	if req.SessionToken != "" && awscreds.ContainsKnownXSSPattern(req.SessionToken) {
 		jsonError(w, "session_token contains invalid characters", http.StatusBadRequest)
 		return
 	}

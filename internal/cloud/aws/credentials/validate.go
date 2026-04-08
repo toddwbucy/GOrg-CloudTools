@@ -29,14 +29,18 @@ func ValidAWSKeyID(id string) bool {
 	return true
 }
 
-// xssPatterns is the set of injection signatures rejected in credential fields.
+// xssPatterns is the fixed set of injection signatures checked by
+// ContainsKnownXSSPattern. Encoded or obfuscated variants are not covered.
 var xssPatterns = []string{
 	"<script", "javascript:", "data:", "vbscript:", "<iframe", "onload=", "onerror=",
 }
 
-// ContainsXSS reports whether s contains any known XSS injection pattern.
-// Comparison is case-insensitive so <SCRIPT matches the same as <script.
-func ContainsXSS(s string) bool {
+// ContainsKnownXSSPattern reports whether s contains any of the known,
+// case-insensitive XSS injection signatures in xssPatterns. This is a
+// heuristic defence-in-depth check for credential input fields; it does NOT
+// provide full XSS protection. Encoded, obfuscated, or novel payloads will not
+// be caught. Proper output encoding at render boundaries is still required.
+func ContainsKnownXSSPattern(s string) bool {
 	lower := strings.ToLower(s)
 	for _, p := range xssPatterns {
 		if strings.Contains(lower, p) {

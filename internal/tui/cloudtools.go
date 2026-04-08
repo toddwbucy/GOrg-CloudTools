@@ -76,8 +76,12 @@ func (m *cloudToolsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					return m, nil
 				}
 				if !m.root.hasCredentials(provider, env) {
+					toolID := tool.ID
 					return m, func() tea.Msg {
-						return showCredentialModalMsg{returnTo: ScreenCloudTools}
+						return showCredentialModalMsg{
+							returnTo:      ScreenCloudTools,
+							pendingToolID: toolID,
+						}
 					}
 				}
 				return m, func() tea.Msg {
@@ -112,17 +116,20 @@ func (m *cloudToolsModel) View() tea.View {
 
 	provider := ""
 	for i, t := range m.tools {
-		p, env, _ := cloudProvider(t.Platform)
+		p, env, provErr := cloudProvider(t.Platform)
 		if t.Platform != provider {
 			provider = t.Platform
 			label := strings.ToUpper(t.Platform)
 			if label == "" {
 				label = "UNKNOWN"
 			}
+			if provErr != nil {
+				label = "UNSUPPORTED (" + t.Platform + ")"
+			}
 			sb.WriteString("\n  " + titleStyle.Render(label) + "\n")
 			sb.WriteString("  " + strings.Repeat("─", 40) + "\n")
 		}
-		hasCredentials := m.root.hasCredentials(p, env)
+		hasCredentials := provErr == nil && m.root.hasCredentials(p, env)
 		desc := t.Description
 		if desc == "" {
 			desc = t.ToolType

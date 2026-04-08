@@ -182,10 +182,10 @@ func (m *instanceSelectorModel) View() tea.View {
 		return tea.NewView(sb.String())
 	}
 
-	// Column header
-	sb.WriteString(fmt.Sprintf("  %-3s  %-21s  %-9s  %-10s  %s\n",
+	// Column header — AccountID uses %-12s to fit 12-digit AWS account IDs.
+	sb.WriteString(fmt.Sprintf("  %-3s  %-21s  %-9s  %-12s  %s\n",
 		"", "Instance ID", "Platform", "Account", "Name"))
-	sb.WriteString("  " + strings.Repeat("─", 70) + "\n")
+	sb.WriteString("  " + strings.Repeat("─", 72) + "\n")
 
 	for i, inst := range m.instances {
 		check := "[ ]"
@@ -196,7 +196,7 @@ func (m *instanceSelectorModel) View() tea.View {
 		if name == "" {
 			name = dimStyle.Render("—")
 		}
-		line := fmt.Sprintf("  %s  %-21s  %-9s  %-10s  %s",
+		line := fmt.Sprintf("  %s  %-21s  %-9s  %-12s  %s",
 			check, inst.InstanceID, inst.Platform, inst.AccountID, name)
 		if i == m.cursor {
 			sb.WriteString(selectedStyle.Render("›" + line[1:]))

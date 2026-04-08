@@ -206,7 +206,7 @@ func (m *credentialInputModel) submitCmd() tea.Cmd {
 		m.errMsg = "Access Key ID format is invalid (must be 20 chars, AKIA/ASIA prefix)"
 		return nil
 	}
-	if credentials.ContainsXSS(secret) || credentials.ContainsXSS(token) {
+	if credentials.ContainsKnownXSSPattern(secret) || credentials.ContainsKnownXSSPattern(token) {
 		m.errMsg = "Credential fields contain invalid characters"
 		return nil
 	}
