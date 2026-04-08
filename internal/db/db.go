@@ -36,6 +36,16 @@ func Open(dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
+// Close cleanly shuts down the underlying database connection pool.
+// Important for SQLite WAL mode: a clean close triggers a final checkpoint.
+func Close(database *gorm.DB) error {
+	sqlDB, err := database.DB()
+	if err != nil {
+		return fmt.Errorf("getting underlying sql.DB: %w", err)
+	}
+	return sqlDB.Close()
+}
+
 // AutoMigrate creates or updates all application tables.
 func AutoMigrate(db *gorm.DB) error {
 	return db.AutoMigrate(

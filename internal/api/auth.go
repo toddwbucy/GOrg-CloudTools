@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 	"github.com/toddwbucy/GOrg-CloudTools/internal/api/middleware"
+	awscreds "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/credentials"
 	gorgaws "github.com/toddwbucy/gorg-aws"
 )
 
@@ -39,15 +39,15 @@ func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request)
 		jsonError(w, "environment must be 'com' or 'gov'", http.StatusBadRequest)
 		return
 	}
-	if !isValidAWSKeyID(req.AccessKeyID) {
+	if !awscreds.ValidAWSKeyID(req.AccessKeyID) {
 		jsonError(w, "access_key_id format is invalid", http.StatusBadRequest)
 		return
 	}
-	if containsXSS(req.SecretAccessKey) {
+	if awscreds.ContainsKnownXSSPattern(req.SecretAccessKey) {
 		jsonError(w, "secret_access_key contains invalid characters", http.StatusBadRequest)
 		return
 	}
-	if req.SessionToken != "" && containsXSS(req.SessionToken) {
+	if req.SessionToken != "" && awscreds.ContainsKnownXSSPattern(req.SessionToken) {
 		jsonError(w, "session_token contains invalid characters", http.StatusBadRequest)
 		return
 	}
@@ -179,40 +179,3 @@ func resolveRegion(region, env string) (string, error) {
 	}
 }
 
-// isValidAWSKeyID checks that id matches the format AWS uses for access key IDs:
-// a known 4-character prefix followed by exactly 16 uppercase alphanumeric characters.
-// Accepted prefixes: AKIA (long-term), ASIA (STS temporary), AROA (role),
-// AIDA (IAM user), AIPA (service role).
-func isValidAWSKeyID(id string) bool {
-	if len(id) != 20 {
-		return false
-	}
-	switch id[:4] {
-	case "AKIA", "ASIA", "AROA", "AIDA", "AIPA":
-	default:
-		return false
-	}
-	for _, c := range id[4:] {
-		if !((c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')) {
-			return false
-		}
-	}
-	return true
-}
-
-// xssPatterns is the set of injection signatures rejected in credential fields.
-var xssPatterns = []string{
-	"<script", "javascript:", "data:", "vbscript:", "<iframe", "onload=", "onerror=",
-}
-
-// containsXSS returns true if s contains any known XSS injection pattern.
-// Comparison is case-insensitive so <SCRIPT matches the same as <script.
-func containsXSS(s string) bool {
-	lower := strings.ToLower(s)
-	for _, p := range xssPatterns {
-		if strings.Contains(lower, p) {
-			return true
-		}
-	}
-	return false
-}
