@@ -22,21 +22,30 @@ type instancesLoadedMsg struct {
 // filtered by the selected tool's platform. The user selects instances then
 // presses Enter to proceed to the execution screen.
 type instanceSelectorModel struct {
-	root      *Model
-	toolID    uint
-	tool      models.Tool
-	instances []ec2pkg.Instance
-	selected  map[int]bool
-	cursor    int
-	loaded    bool
-	err       string
+	root         *Model
+	toolID       uint
+	tool         models.Tool
+	instances    []ec2pkg.Instance
+	selected     map[int]bool
+	cursor       int
+	loaded       bool
+	err          string
+	preferredEnv string // "com" or "gov"; togglable with [e] when both are loaded
 }
 
 func newInstanceSelectorModel(root *Model, toolID uint) *instanceSelectorModel {
+	// Default to the commercial env; fall back to gov if com is absent.
+	// This is an explicit choice that the user can override with [e].
+	preferredEnv := "com"
+	if root.cloudEnvs[envKey("aws", "com")] == nil &&
+		root.cloudEnvs[envKey("aws", "gov")] != nil {
+		preferredEnv = "gov"
+	}
 	return &instanceSelectorModel{
-		root:     root,
-		toolID:   toolID,
-		selected: make(map[int]bool),
+		root:         root,
+		toolID:       toolID,
+		selected:     make(map[int]bool),
+		preferredEnv: preferredEnv,
 	}
 }
 
@@ -48,13 +57,9 @@ func (m *instanceSelectorModel) loadCmd() tea.Cmd {
 	db := m.root.db
 	toolID := m.toolID
 
-	// Capture the active cloud env at dispatch time (not render time).
-	var ce *CloudEnv
-	if env := m.root.cloudEnvs[envKey("aws", "com")]; env != nil {
-		ce = env
-	} else if env := m.root.cloudEnvs[envKey("aws", "gov")]; env != nil {
-		ce = env
-	}
+	// Capture the selected env at dispatch time (not render time).
+	// preferredEnv is set at construction and can be toggled with [e].
+	ce := m.root.cloudEnvs[envKey("aws", m.preferredEnv)]
 
 	return func() tea.Msg {
 		var tool models.Tool
@@ -103,6 +108,23 @@ func (m *instanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc", "q":
 			return m, func() tea.Msg { return navigateMsg{screen: ScreenOSTools} }
+		case "e":
+			// Toggle between com and gov when both envs are loaded.
+			hasCom := m.root.cloudEnvs[envKey("aws", "com")] != nil
+			hasGov := m.root.cloudEnvs[envKey("aws", "gov")] != nil
+			if hasCom && hasGov {
+				if m.preferredEnv == "com" {
+					m.preferredEnv = "gov"
+				} else {
+					m.preferredEnv = "com"
+				}
+				m.loaded = false
+				m.instances = nil
+				m.selected = make(map[int]bool)
+				m.cursor = 0
+				m.err = ""
+				return m, m.loadCmd()
+			}
 		case "up", "k":
 			if m.cursor > 0 {
 				m.cursor--
@@ -153,9 +175,10 @@ func (m *instanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *instanceSelectorModel) View() tea.View {
 	var sb strings.Builder
 
-	title := "Select Instances"
+	envLabel := "AWS " + strings.ToUpper(m.preferredEnv)
+	title := fmt.Sprintf("Select Instances [%s]", envLabel)
 	if m.loaded && m.tool.Name != "" {
-		title = fmt.Sprintf("Select Instances — %s", m.tool.Name)
+		title = fmt.Sprintf("Select Instances — %s  [%s]", m.tool.Name, envLabel)
 	}
 	sb.WriteString(titleStyle.Render(title))
 	sb.WriteString("\n\n")
@@ -215,7 +238,13 @@ func (m *instanceSelectorModel) View() tea.View {
 	}
 	sb.WriteString("  " + m.root.statusBar())
 	sb.WriteString("\n\n")
-	sb.WriteString(helpStyle.Render("  [↑↓/jk] Navigate   [Space] Toggle   [a] Select All   [Enter] Run   [Esc] Back"))
+	hasBoth := m.root.cloudEnvs[envKey("aws", "com")] != nil &&
+		m.root.cloudEnvs[envKey("aws", "gov")] != nil
+	help := "  [↑↓/jk] Navigate   [Space] Toggle   [a] Select All   [Enter] Run   [Esc] Back"
+	if hasBoth {
+		help += "   [e] Switch COM/GOV"
+	}
+	sb.WriteString(helpStyle.Render(help))
 	sb.WriteString("\n")
 
 	return tea.NewView(sb.String())

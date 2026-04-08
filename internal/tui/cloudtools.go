@@ -114,11 +114,11 @@ func (m *cloudToolsModel) View() tea.View {
 		return tea.NewView(sb.String())
 	}
 
-	provider := ""
+	lastPlatform := ""
 	for i, t := range m.tools {
 		p, env, provErr := cloudProvider(t.Platform)
-		if t.Platform != provider {
-			provider = t.Platform
+		if t.Platform != lastPlatform {
+			lastPlatform = t.Platform
 			label := strings.ToUpper(t.Platform)
 			if label == "" {
 				label = "UNKNOWN"
@@ -158,6 +158,10 @@ func (m *cloudToolsModel) View() tea.View {
 // cloudProvider maps a Tool.Platform value to the provider/env pair used by
 // hasCredentials. Returns an error for unsupported platforms so callers do not
 // silently fall back to the wrong cloud credentials.
+//
+// An empty platform string is intentionally treated as AWS commercial: cloud
+// tools seeded before the Platform field was populated should default to the
+// most common case rather than failing loudly for a missing-data gap.
 func cloudProvider(platform string) (provider, env string, err error) {
 	switch platform {
 	case "aws", "":
