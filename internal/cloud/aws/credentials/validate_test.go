@@ -8,11 +8,8 @@ import (
 
 func TestValidAWSKeyID_ValidPrefixes(t *testing.T) {
 	valid := []string{
-		"AKIAIOSFODNN7EXAMPLE", // AKIA — long-term
-		"ASIAIOSFODNN7EXAMPLE", // ASIA — STS temp
-		"AROAIOSFODNN7EXAMPLE", // AROA — role
-		"AIDAIOSFODNN7EXAMPLE", // AIDA — IAM user (legacy)
-		"AIPAIOSFODNN7EXAMPLE", // AIPA — service role
+		"AKIAIOSFODNN7EXAMPLE", // AKIA — long-term IAM user key
+		"ASIAIOSFODNN7EXAMPLE", // ASIA — STS temporary key
 	}
 	for _, id := range valid {
 		if !credentials.ValidAWSKeyID(id) {
@@ -24,10 +21,13 @@ func TestValidAWSKeyID_ValidPrefixes(t *testing.T) {
 func TestValidAWSKeyID_InvalidPrefix(t *testing.T) {
 	invalid := []string{
 		"XXXX0000000000000000",
-		"akiaiosfodnn7example", // lowercase
+		"akiaiosfodnn7example",    // lowercase
 		"",
-		"AKIA",                 // too short
+		"AKIA",                    // too short
 		"AKIAIOSFODNN7EXAMPLELONG", // too long
+		"AROAIOSFODNN7EXAMPLE",    // AROA — IAM role principal ID, not an access key
+		"AIDAIOSFODNN7EXAMPLE",    // AIDA — IAM user principal ID, not an access key
+		"AIPAIOSFODNN7EXAMPLE",    // AIPA — instance profile ID, not an access key
 	}
 	for _, id := range invalid {
 		if credentials.ValidAWSKeyID(id) {

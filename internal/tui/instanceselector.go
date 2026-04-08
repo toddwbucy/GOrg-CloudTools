@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	ec2pkg "github.com/toddwbucy/GOrg-CloudTools/internal/cloud/aws/ec2"
@@ -64,7 +65,10 @@ func (m *instanceSelectorModel) loadCmd() tea.Cmd {
 			return instancesLoadedMsg{tool: tool, err: fmt.Errorf("no AWS credentials loaded")}
 		}
 
-		instances, err := ec2pkg.ListRunning(context.Background(), ce.Cfg, ce.AccountID)
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		instances, err := ec2pkg.ListRunning(ctx, ce.Cfg, ce.AccountID)
 		if err != nil {
 			return instancesLoadedMsg{tool: tool, err: err}
 		}
@@ -112,8 +116,16 @@ func (m *instanceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.selected[m.cursor] = !m.selected[m.cursor]
 			}
 		case "a":
-			// Select all / deselect all toggle.
-			if len(m.selected) == len(m.instances) {
+			// Select all / deselect all toggle. Count only true entries so
+			// that false entries left by Space-deselect don't trigger a
+			// premature deselect-all.
+			trueCount := 0
+			for _, v := range m.selected {
+				if v {
+					trueCount++
+				}
+			}
+			if trueCount == len(m.instances) {
 				m.selected = make(map[int]bool)
 			} else {
 				for i := range m.instances {
@@ -194,7 +206,7 @@ func (m *instanceSelectorModel) View() tea.View {
 		sb.WriteString("\n")
 	}
 
-	selCount := len(m.selected)
+	selCount := len(m.selectedIDs())
 	sb.WriteString("\n")
 	if selCount > 0 {
 		sb.WriteString(fmt.Sprintf("  %s selected\n\n", statusActiveStyle.Render(fmt.Sprintf("%d instance(s)", selCount))))

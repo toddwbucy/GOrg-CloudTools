@@ -9,15 +9,15 @@ import "strings"
 //
 //	AKIA — long-term IAM user key
 //	ASIA — STS temporary key (session token required)
-//	AROA — role key
-//	AIDA — IAM user key (legacy)
-//	AIPA — service role key
+//
+// AROA, AIDA, and AIPA are IAM principal IDs, not access key IDs, and are
+// intentionally excluded.
 func ValidAWSKeyID(id string) bool {
 	if len(id) != 20 {
 		return false
 	}
 	switch id[:4] {
-	case "AKIA", "ASIA", "AROA", "AIDA", "AIPA":
+	case "AKIA", "ASIA":
 	default:
 		return false
 	}

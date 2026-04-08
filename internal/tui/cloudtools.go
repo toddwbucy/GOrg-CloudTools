@@ -70,7 +70,11 @@ func (m *cloudToolsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter", " ":
 			if m.cursor < len(m.tools) {
 				tool := m.tools[m.cursor]
-				provider, env := cloudProvider(tool.Platform)
+				provider, env, err := cloudProvider(tool.Platform)
+				if err != nil {
+					m.err = err.Error()
+					return m, nil
+				}
 				if !m.root.hasCredentials(provider, env) {
 					return m, func() tea.Msg {
 						return showCredentialModalMsg{returnTo: ScreenCloudTools}
@@ -108,7 +112,7 @@ func (m *cloudToolsModel) View() tea.View {
 
 	provider := ""
 	for i, t := range m.tools {
-		p, env := cloudProvider(t.Platform)
+		p, env, _ := cloudProvider(t.Platform)
 		if t.Platform != provider {
 			provider = t.Platform
 			label := strings.ToUpper(t.Platform)
@@ -144,13 +148,16 @@ func (m *cloudToolsModel) View() tea.View {
 	return tea.NewView(sb.String())
 }
 
-// cloudProvider maps a Tool.Platform value (e.g. "aws", "aws-gov") to the
-// provider/env pair used by hasCredentials. Defaults to AWS commercial.
-func cloudProvider(platform string) (provider, env string) {
+// cloudProvider maps a Tool.Platform value to the provider/env pair used by
+// hasCredentials. Returns an error for unsupported platforms so callers do not
+// silently fall back to the wrong cloud credentials.
+func cloudProvider(platform string) (provider, env string, err error) {
 	switch platform {
+	case "aws", "":
+		return "aws", "com", nil
 	case "aws-gov":
-		return "aws", "gov"
+		return "aws", "gov", nil
 	default:
-		return "aws", "com"
+		return "", "", fmt.Errorf("unsupported cloud platform %q", platform)
 	}
 }

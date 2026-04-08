@@ -93,10 +93,5 @@ func (m mainMenuModel) View() tea.View {
 	sb.WriteString(helpStyle.Render("  [↑↓/jk] Navigate   [Enter] Select   [A] Credentials   [Q] Quit"))
 	sb.WriteString("\n")
 
-	if m.root.err != nil {
-		sb.WriteString("\n" + errorStyle.Render("  Error: "+m.root.err.Error()))
-		sb.WriteString("\n")
-	}
-
 	return tea.NewView(sb.String())
 }

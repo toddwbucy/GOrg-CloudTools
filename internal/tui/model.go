@@ -45,17 +45,23 @@ type navigateMsg struct {
 
 // credentialsLoadedMsg is sent after a successful credential validation.
 // The root model stores the CloudEnv in its map and returns to the previous screen.
+// pendingToolID mirrors showCredentialModalMsg.pendingToolID: when non-zero the
+// root model navigates to ScreenInstanceSelector instead of returnTo.
 type credentialsLoadedMsg struct {
-	provider string // e.g. "aws"
-	env      string // e.g. "com" or "gov"
-	ce       *CloudEnv
-	returnTo Screen
+	provider      string // e.g. "aws"
+	env           string // e.g. "com" or "gov"
+	ce            *CloudEnv
+	returnTo      Screen
+	pendingToolID uint
 }
 
 // showCredentialModalMsg asks the root model to open the credential input
 // screen. returnTo is the screen to return to after successful credential entry.
+// pendingToolID, when non-zero, is forwarded so that after credentials are
+// accepted the user lands directly on ScreenInstanceSelector for that tool.
 type showCredentialModalMsg struct {
-	returnTo Screen
+	returnTo      Screen
+	pendingToolID uint
 }
 
 // Model is the root application model. It holds all top-level state and
@@ -68,7 +74,6 @@ type Model struct {
 	cloudEnvs map[string]*CloudEnv // keyed by envKey("aws","com") etc.
 	width     int
 	height    int
-	err       error
 }
 
 // New creates the root Model. The TUI starts with no credentials loaded and
@@ -112,14 +117,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case showCredentialModalMsg:
 		m.screen = ScreenCredentialInput
-		m.active = newCredentialInputModel(&m, msg.returnTo)
+		m.active = newCredentialInputModel(&m, msg.returnTo, msg.pendingToolID)
 		return m, m.active.Init()
 
 	case credentialsLoadedMsg:
 		m.cloudEnvs[envKey(msg.provider, msg.env)] = msg.ce
-		// Return to the screen that triggered the credential prompt.
-		m.screen = msg.returnTo
-		m.active = m.screenModel(navigateMsg{screen: msg.returnTo})
+		// If there is a pending tool, jump straight to the instance selector.
+		// Otherwise return to whichever screen triggered the credential prompt.
+		nav := navigateMsg{screen: msg.returnTo}
+		if msg.pendingToolID != 0 {
+			nav = navigateMsg{screen: ScreenInstanceSelector, toolID: msg.pendingToolID}
+		}
+		m.screen = nav.screen
+		m.active = m.screenModel(nav)
 		return m, m.active.Init()
 	}
 
@@ -175,7 +185,7 @@ func (m *Model) screenModel(nav navigateMsg) tea.Model {
 	case ScreenMainMenu:
 		return newMainMenuModel(m)
 	case ScreenCredentialInput:
-		return newCredentialInputModel(m, nav.screen)
+		return newCredentialInputModel(m, nav.screen, 0)
 	case ScreenOSTools:
 		return newOSToolsModel(m)
 	case ScreenCloudTools:

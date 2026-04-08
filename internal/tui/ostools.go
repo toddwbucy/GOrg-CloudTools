@@ -70,8 +70,12 @@ func (m *osToolsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				tool := m.tools[m.cursor]
 				// Check credentials — OS tools need cloud creds to reach instances.
 				if !m.root.hasCredentials("aws", "com") && !m.root.hasCredentials("aws", "gov") {
+					toolID := tool.ID
 					return m, func() tea.Msg {
-						return showCredentialModalMsg{returnTo: ScreenOSTools}
+						return showCredentialModalMsg{
+							returnTo:      ScreenOSTools,
+							pendingToolID: toolID,
+						}
 					}
 				}
 				return m, func() tea.Msg {
@@ -108,8 +112,13 @@ func (m *osToolsModel) View() tea.View {
 	for i, t := range m.tools {
 		if t.Platform != platform {
 			platform = t.Platform
-			p := strings.ToUpper(platform[:1]) + platform[1:]
-			sb.WriteString("\n  " + titleStyle.Render(p) + "\n")
+			label := platform
+			if label == "" {
+				label = "Unknown"
+			} else {
+				label = strings.ToUpper(label[:1]) + label[1:]
+			}
+			sb.WriteString("\n  " + titleStyle.Render(label) + "\n")
 			sb.WriteString("  " + strings.Repeat("─", 40) + "\n")
 		}
 		desc := t.Description

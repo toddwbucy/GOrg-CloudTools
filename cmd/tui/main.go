@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -23,11 +24,24 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+}
+
+func run() error {
 	// Redirect slog to a file — bubbletea takes over stdout/stderr.
 	// Any log output written to the terminal corrupts the TUI rendering.
+	// If the file cannot be opened, send logs to io.Discard rather than
+	// leaving slog's default handler writing to stderr.
 	logPath := filepath.Join(os.TempDir(), "cloudtools-tui.log")
 	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
-	if err == nil {
+	if err != nil {
+		slog.SetDefault(slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{
+			Level: slog.LevelInfo,
+		})))
+	} else {
 		slog.SetDefault(slog.New(slog.NewTextHandler(logFile, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		})))
@@ -36,18 +50,21 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("config error: %w", err)
 	}
 
 	database, err := db.Open(cfg.DatabaseURL)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "database error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("database error: %w", err)
 	}
+	defer func() {
+		if cerr := db.Close(database); cerr != nil {
+			slog.Warn("db close failed", "err", cerr)
+		}
+	}()
+
 	if err := db.AutoMigrate(database); err != nil {
-		fmt.Fprintf(os.Stderr, "migration error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("migration error: %w", err)
 	}
 
 	// Mark any jobs left in-flight by a previous run as interrupted.
@@ -62,7 +79,7 @@ func main() {
 	model := tui.New(cfg, database)
 	p := tea.NewProgram(model)
 	if _, err := p.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "tui error: %v\n", err)
-		os.Exit(1)
+		return fmt.Errorf("tui error: %w", err)
 	}
+	return nil
 }

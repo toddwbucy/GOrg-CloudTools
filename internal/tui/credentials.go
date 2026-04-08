@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/bubbles/v2/textinput"
@@ -26,8 +27,9 @@ const (
 // It presents three text fields (Access Key ID, Secret, Session Token)
 // and an environment selector (COM / GOV).
 type credentialInputModel struct {
-	root     *Model
-	returnTo Screen
+	root          *Model
+	returnTo      Screen
+	pendingToolID uint // forwarded to credentialsLoadedMsg for post-auth navigation
 
 	env    string // "com" or "gov"
 	fields [fieldCount]textinput.Model
@@ -37,11 +39,12 @@ type credentialInputModel struct {
 	errMsg     string
 }
 
-func newCredentialInputModel(root *Model, returnTo Screen) *credentialInputModel {
+func newCredentialInputModel(root *Model, returnTo Screen, pendingToolID uint) *credentialInputModel {
 	m := &credentialInputModel{
-		root:     root,
-		returnTo: returnTo,
-		env:      "com",
+		root:          root,
+		returnTo:      returnTo,
+		pendingToolID: pendingToolID,
+		env:           "com",
 	}
 
 	keyID := textinput.New()
@@ -105,10 +108,11 @@ func (m *credentialInputModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, func() tea.Msg {
 			return credentialsLoadedMsg{
-				provider: "aws",
-				env:      m.env,
-				ce:       msg.ce,
-				returnTo: m.returnTo,
+				provider:      "aws",
+				env:           m.env,
+				ce:            msg.ce,
+				returnTo:      m.returnTo,
+				pendingToolID: m.pendingToolID,
 			}
 		}
 	}
@@ -199,7 +203,7 @@ func (m *credentialInputModel) submitCmd() tea.Cmd {
 		return nil
 	}
 	if !credentials.ValidAWSKeyID(keyID) {
-		m.errMsg = "Access Key ID format is invalid (must be 20 chars, AKIA/ASIA/AROA prefix)"
+		m.errMsg = "Access Key ID format is invalid (must be 20 chars, AKIA/ASIA prefix)"
 		return nil
 	}
 	if credentials.ContainsXSS(secret) || credentials.ContainsXSS(token) {
@@ -226,7 +230,10 @@ func (m *credentialInputModel) submitCmd() tea.Cmd {
 			return credentialValidationResultMsg{err: fmt.Errorf("building AWS config: %w", err)}
 		}
 
-		identity, err := credentials.Validate(context.Background(), cfg)
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+
+		identity, err := credentials.Validate(ctx, cfg)
 		if err != nil {
 			return credentialValidationResultMsg{err: err}
 		}
