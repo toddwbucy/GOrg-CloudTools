@@ -203,8 +203,14 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// Resolve account/region metadata from the DB (best-effort).
-	accountID, region := s.resolveInstanceMeta(req.InstanceIDs, sess)
+	// Resolve and validate that all instances share the same account/region.
+	// SSM is region-scoped: a single SendCommand can only target instances in
+	// the caller's region. Return 400 early rather than letting SSM fail silently.
+	accountID, region, err := s.resolveUniformMeta(req.InstanceIDs, sess)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	runner := exec.New(s.db, s.cfg.MaxConcurrentExecutions, s.cfg.ExecutionTimeoutSecs)
 	execReq := exec.ScriptRequest{
@@ -213,6 +219,7 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 		InstanceIDs:  req.InstanceIDs,
 		AccountID:    accountID,
 		Region:       region,
+		CallerKey:    sess.AWSAccessKeyID,
 	}
 
 	// If requested, persist the script as a library entry (non-ephemeral) and
@@ -250,28 +257,58 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-// resolveInstanceMeta looks up the account_id and region for the first
-// instance in the list from the local DB. Falls back to the session account
-// and the environment home region when the instance is not in the DB.
-func (s *Server) resolveInstanceMeta(instanceIDs []string, sess *middleware.Session) (accountID, region string) {
+// resolveUniformMeta resolves account/region for every instance in one bulk DB
+// query and validates they all land in the same (account, region) pair. SSM
+// SendCommand is region-scoped, so cross-region batches must be split by the
+// caller. Returns a 400-worthy error if instances span multiple pairs.
+// Instances not found in the DB fall back to the session's account/region.
+func (s *Server) resolveUniformMeta(instanceIDs []string, sess *middleware.Session) (accountID, region string, err error) {
 	if len(instanceIDs) == 0 {
-		return sess.AWSAccountID, homeRegion(sess.AWSEnvironment)
+		return sess.AWSAccountID, homeRegion(sess.AWSEnvironment), nil
 	}
 
-	var row struct {
+	// One query for all IDs.
+	type dbRow struct {
+		InstanceID string
 		AccountID  string
 		RegionName string
 	}
-	err := s.db.Model(&models.Instance{}).
-		Select("accounts.account_id as account_id, regions.name as region_name").
+	var rows []dbRow
+	s.db.Model(&models.Instance{}).
+		Select("instances.instance_id, accounts.account_id as account_id, regions.name as region_name").
 		Joins("JOIN regions ON instances.region_id = regions.id").
 		Joins("JOIN accounts ON regions.account_id = accounts.id").
-		Where("instances.instance_id = ?", instanceIDs[0]).
-		Scan(&row).Error
-	if err != nil || row.AccountID == "" {
-		return sess.AWSAccountID, homeRegion(sess.AWSEnvironment)
+		Where("instances.instance_id IN ?", instanceIDs).
+		Scan(&rows)
+
+	// Build a lookup table.
+	byID := make(map[string]dbRow, len(rows))
+	for _, r := range rows {
+		byID[r.InstanceID] = r
 	}
-	return row.AccountID, row.RegionName
+
+	fallbackAccount := sess.AWSAccountID
+	fallbackRegion := homeRegion(sess.AWSEnvironment)
+
+	type pair struct{ account, region string }
+	seen := make(map[pair]struct{})
+	var resolved pair
+
+	for _, id := range instanceIDs {
+		var p pair
+		if r, ok := byID[id]; ok {
+			p = pair{r.AccountID, r.RegionName}
+		} else {
+			p = pair{fallbackAccount, fallbackRegion}
+		}
+		seen[p] = struct{}{}
+		resolved = p // last wins; only used when len(seen)==1
+	}
+
+	if len(seen) > 1 {
+		return "", "", fmt.Errorf("instances span multiple account/region pairs; submit separate requests per region")
+	}
+	return resolved.account, resolved.region, nil
 }
 
 // homeRegion returns the default home region for the given AWS environment.
@@ -289,8 +326,13 @@ func homeRegion(env string) string {
 //
 // Route: GET /aws/script-runner/results/{batch_id}
 func (s *Server) handleScriptRunnerResults(w http.ResponseWriter, r *http.Request) {
+	sess := middleware.GetSession(r)
 	var batch models.ExecutionBatch
-	err := s.db.Preload("Executions").First(&batch, r.PathValue("batch_id")).Error
+	// Scope to batches owned by this caller; legacy batches (empty caller_key)
+	// remain accessible for backward compatibility.
+	err := s.db.Preload("Executions").
+		Where("id = ? AND (caller_key = '' OR caller_key = ?)", r.PathValue("batch_id"), sess.AWSAccessKeyID).
+		First(&batch).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			jsonError(w, "batch not found", http.StatusNotFound)
@@ -346,8 +388,13 @@ func (s *Server) handleScriptRunnerResults(w http.ResponseWriter, r *http.Reques
 //
 // Route: GET /aws/script-runner/download-results/{batch_id}?format=csv|json|text
 func (s *Server) handleDownloadResults(w http.ResponseWriter, r *http.Request) {
+	sess := middleware.GetSession(r)
 	var batch models.ExecutionBatch
-	err := s.db.Preload("Executions").First(&batch, r.PathValue("batch_id")).Error
+	// Scope to batches owned by this caller; legacy batches (empty caller_key)
+	// remain accessible for backward compatibility.
+	err := s.db.Preload("Executions").
+		Where("id = ? AND (caller_key = '' OR caller_key = ?)", r.PathValue("batch_id"), sess.AWSAccessKeyID).
+		First(&batch).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			jsonError(w, "batch not found", http.StatusNotFound)
@@ -417,7 +464,7 @@ func (s *Server) handleDownloadResults(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", `attachment; filename="results-`+batchIDStr+`.txt"`)
 		w.Write(buf.Bytes()) //nolint:errcheck
 
-	default: // csv
+	case "csv":
 		var buf bytes.Buffer
 		cw := csv.NewWriter(&buf)
 		cw.Write([]string{"instance_id", "account_id", "region", "status", "exit_code", "stdout", "stderr"}) //nolint:errcheck
@@ -440,6 +487,9 @@ func (s *Server) handleDownloadResults(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv; charset=utf-8")
 		w.Header().Set("Content-Disposition", `attachment; filename="results-`+batchIDStr+`.csv"`)
 		w.Write(buf.Bytes()) //nolint:errcheck
+
+	default:
+		jsonError(w, fmt.Sprintf("unsupported format %q: must be csv, json, or text", format), http.StatusBadRequest)
 	}
 }
 

@@ -56,6 +56,9 @@ type ScriptRequest struct {
 	Region       string
 	SessionID    *uint  // optional: groups this job under an ExecutionSession
 	ChangeNumber string // optional: change management reference
+	// CallerKey is the AWS access-key ID of the caller; stored on the batch so
+	// read-side endpoints can scope results to the originating session.
+	CallerKey string
 }
 
 // Runner executes scripts against EC2 instances via SSM and persists results.
@@ -112,6 +115,7 @@ func (r *Runner) start(ctx context.Context, executor RemoteExecutor, req ScriptR
 		TotalInstances: len(req.InstanceIDs),
 		Status:         models.BatchStatusPending,
 		SessionID:      req.SessionID,
+		CallerKey:      req.CallerKey,
 	}
 	if err := r.db.Create(batch).Error; err != nil {
 		// Clean up the ephemeral script we just inserted so it doesn't orphan.

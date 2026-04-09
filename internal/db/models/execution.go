@@ -72,6 +72,11 @@ type ExecutionBatch struct {
 	SessionID *uint            `gorm:"index" json:"session_id,omitempty"`
 	Session   *ExecutionSession `gorm:"foreignKey:SessionID" json:"-"`
 
+	// CallerKey is the AWS access-key ID of the user who created this batch.
+	// It is used to scope read-side compat endpoints to the originating session.
+	// Empty for batches created before this field was introduced.
+	CallerKey string `gorm:"index" json:"-"`
+
 	BatchMetadata map[string]any `gorm:"serializer:json" json:"batch_metadata,omitempty"`
 
 	// Executions are loaded via Preload when the full job view is requested.
