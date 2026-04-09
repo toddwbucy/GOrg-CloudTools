@@ -162,12 +162,20 @@ func TestListChangesAlias_Shape(t *testing.T) {
 
 	// Seed two changes with instances.
 	c1 := models.Change{ChangeNumber: "CHG0001", Status: models.ChangeStatusNew}
-	db.Create(&c1)
-	db.Create(&models.ChangeInstance{ChangeID: c1.ID, InstanceID: "i-aaa", AccountID: "111", Region: "us-east-1", Platform: "linux"})
-	db.Create(&models.ChangeInstance{ChangeID: c1.ID, InstanceID: "i-bbb", AccountID: "111", Region: "us-east-1", Platform: "linux"})
+	if err := db.Create(&c1).Error; err != nil {
+		t.Fatalf("seed c1: %v", err)
+	}
+	if err := db.Create(&models.ChangeInstance{ChangeID: c1.ID, InstanceID: "i-aaa", AccountID: "111", Region: "us-east-1", Platform: "linux"}).Error; err != nil {
+		t.Fatalf("seed instance i-aaa: %v", err)
+	}
+	if err := db.Create(&models.ChangeInstance{ChangeID: c1.ID, InstanceID: "i-bbb", AccountID: "111", Region: "us-east-1", Platform: "linux"}).Error; err != nil {
+		t.Fatalf("seed instance i-bbb: %v", err)
+	}
 
 	c2 := models.Change{ChangeNumber: "CHG0002", Status: models.ChangeStatusNew}
-	db.Create(&c2)
+	if err := db.Create(&c2).Error; err != nil {
+		t.Fatalf("seed c2: %v", err)
+	}
 
 	res, err := http.Get(ts.URL + "/aws/script-runner/list-changes")
 	if err != nil {
@@ -183,8 +191,10 @@ func TestListChangesAlias_Shape(t *testing.T) {
 	}
 
 	// Find CHG0001 in results and verify instance_count.
+	foundCHG0001 := false
 	for _, item := range got {
 		if item["change_number"] == "CHG0001" {
+			foundCHG0001 = true
 			count, ok := item["instance_count"].(float64)
 			if !ok {
 				t.Fatalf("instance_count is not a number: %T", item["instance_count"])
@@ -193,6 +203,9 @@ func TestListChangesAlias_Shape(t *testing.T) {
 				t.Errorf("CHG0001: expected instance_count=2, got %v", count)
 			}
 		}
+	}
+	if !foundCHG0001 {
+		t.Fatalf("CHG0001 not found in list-changes response")
 	}
 }
 
@@ -294,8 +307,16 @@ func TestSaveChangeWithInstances_ReplacesInstances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST 1: %v", err)
 	}
+	if res1.StatusCode != http.StatusOK {
+		res1.Body.Close()
+		t.Fatalf("POST 1: expected 200, got %d", res1.StatusCode)
+	}
 	var r1 map[string]any
 	decodeJSON(t, res1, &r1)
+	rawID, ok := r1["change_id"].(float64)
+	if !ok || rawID == 0 {
+		t.Fatalf("POST 1: expected non-zero numeric change_id, got %v", r1["change_id"])
+	}
 
 	// Second save: 1 new instance.
 	inst2, _ := json.Marshal([]map[string]string{
@@ -311,9 +332,13 @@ func TestSaveChangeWithInstances_ReplacesInstances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST 2: %v", err)
 	}
+	if res2.StatusCode != http.StatusOK {
+		res2.Body.Close()
+		t.Fatalf("POST 2: expected 200, got %d", res2.StatusCode)
+	}
 	res2.Body.Close()
 
-	changeID := uint(r1["change_id"].(float64))
+	changeID := uint(rawID)
 	var count int64
 	db.Model(&models.ChangeInstance{}).Where("change_id = ?", changeID).Count(&count)
 	if count != 1 {
@@ -446,14 +471,22 @@ func TestUploadChangeCSV_Success(t *testing.T) {
 	if got["change_id"] == nil {
 		t.Error("response missing change_id")
 	}
-	if got["instances"].(float64) != 2 {
-		t.Errorf("expected instances=2, got %v", got["instances"])
+	instVal, ok := got["instances"].(float64)
+	if !ok {
+		t.Fatalf("instances is not a number: %T", got["instances"])
+	}
+	if instVal != 2 {
+		t.Errorf("expected instances=2, got %v", instVal)
 	}
 
 	// current-change returns the uploaded change.
 	res2, err := client.Get(ts.URL + "/aws/script-runner/current-change")
 	if err != nil {
 		t.Fatalf("GET current-change: %v", err)
+	}
+	if res2.StatusCode != http.StatusOK {
+		res2.Body.Close()
+		t.Fatalf("GET current-change: expected 200, got %d", res2.StatusCode)
 	}
 	var current models.Change
 	decodeJSON(t, res2, &current)
