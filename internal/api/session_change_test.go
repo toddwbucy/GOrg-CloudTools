@@ -400,6 +400,28 @@ func TestUploadChangeCSV_MissingColumns(t *testing.T) {
 	}
 }
 
+func TestUploadChangeCSV_MismatchedChangeNumber(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+	client := newTestClient(t)
+
+	csv := strings.Join([]string{
+		"change_number,platform,region,account_id,instance_id",
+		"CHG-A,linux,us-east-1,111111111111,i-aaa",
+		"CHG-B,linux,us-east-1,111111111111,i-bbb", // different change_number
+	}, "\n")
+
+	body, ct := multipartCSV(t, csv)
+	res, err := client.Post(ts.URL+"/aws/script-runner/upload-change-csv", ct, body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for mismatched change_number, got %d", res.StatusCode)
+	}
+}
+
 func TestUploadChangeCSV_Success(t *testing.T) {
 	db := newTestDB(t)
 	ts := newDevModeTestServer(t, db)

@@ -64,14 +64,30 @@ func (s *Server) handleListChangesAlias(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	// Single aggregated query instead of N separate Count calls.
+	type countRow struct {
+		ChangeID uint  `gorm:"column:change_id"`
+		Count    int64 `gorm:"column:count"`
+	}
+	var counts []countRow
+	if err := s.db.Model(&models.ChangeInstance{}).
+		Select("change_id, COUNT(*) as count").
+		Group("change_id").
+		Scan(&counts).Error; err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+	countByID := make(map[uint]int64, len(counts))
+	for _, cr := range counts {
+		countByID[cr.ChangeID] = cr.Count
+	}
+
 	result := make([]row, 0, len(changes))
 	for _, c := range changes {
-		var count int64
-		s.db.Model(&models.ChangeInstance{}).Where("change_id = ?", c.ID).Count(&count)
 		result = append(result, row{
 			ID:            c.ID,
 			ChangeNumber:  c.ChangeNumber,
-			InstanceCount: count,
+			InstanceCount: countByID[c.ID],
 		})
 	}
 	jsonOK(w, result)
@@ -118,43 +134,45 @@ func (s *Server) handleSaveChangeWithInstances(w http.ResponseWriter, r *http.Re
 		}
 	}
 
-	// Find or create the Change record.
+	// Find or create the Change, then replace ChangeInstances — all in one transaction.
 	var change models.Change
-	err := s.db.Where("change_number = ?", changeNumber).First(&change).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		change = models.Change{
-			ChangeNumber: changeNumber,
-			Description:  description,
-			Status:       models.ChangeStatusNew,
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("change_number = ?", changeNumber).First(&change).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			change = models.Change{
+				ChangeNumber: changeNumber,
+				Description:  description,
+				Status:       models.ChangeStatusNew,
+			}
+			if err := tx.Create(&change).Error; err != nil {
+				return err
+			}
+		} else if description != "" {
+			if err := tx.Model(&change).Update("description", description).Error; err != nil {
+				return err
+			}
 		}
-		if err := s.db.Create(&change).Error; err != nil {
-			jsonError(w, "failed to create change", http.StatusInternalServerError)
-			return
+		if err := tx.Where("change_id = ?", change.ID).Delete(&models.ChangeInstance{}).Error; err != nil {
+			return err
 		}
-	} else if err != nil {
+		for _, inst := range instances {
+			ci := models.ChangeInstance{
+				ChangeID:   change.ID,
+				InstanceID: inst.InstanceID,
+				AccountID:  inst.AccountID,
+				Region:     inst.Region,
+				Platform:   inst.Platform,
+			}
+			if err := tx.Create(&ci).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		jsonError(w, "database error", http.StatusInternalServerError)
 		return
-	} else if description != "" {
-		s.db.Model(&change).Update("description", description)
-	}
-
-	// Replace all ChangeInstances for this change.
-	if err := s.db.Where("change_id = ?", change.ID).Delete(&models.ChangeInstance{}).Error; err != nil {
-		jsonError(w, "failed to clear existing instances", http.StatusInternalServerError)
-		return
-	}
-	for _, inst := range instances {
-		ci := models.ChangeInstance{
-			ChangeID:   change.ID,
-			InstanceID: inst.InstanceID,
-			AccountID:  inst.AccountID,
-			Region:     inst.Region,
-			Platform:   inst.Platform,
-		}
-		if err := s.db.Create(&ci).Error; err != nil {
-			jsonError(w, "failed to save instance", http.StatusInternalServerError)
-			return
-		}
 	}
 
 	// Load into session.
@@ -225,6 +243,15 @@ func (s *Server) handleUploadChangeCSV(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Compute the maximum column index among all required fields so a single
+	// length check per row covers all of them.
+	maxColIdx := 0
+	for _, req := range required {
+		if col[req] > maxColIdx {
+			maxColIdx = col[req]
+		}
+	}
+
 	type csvRow struct {
 		changeNumber string
 		platform     string
@@ -234,7 +261,7 @@ func (s *Server) handleUploadChangeCSV(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]csvRow, 0, len(records)-1)
 	for i, rec := range records[1:] {
-		if len(rec) <= col["instance_id"] {
+		if len(rec) <= maxColIdx {
 			jsonError(w, fmt.Sprintf("CSV row %d: not enough columns", i+2), http.StatusBadRequest)
 			return
 		}
@@ -256,41 +283,49 @@ func (s *Server) handleUploadChangeCSV(w http.ResponseWriter, r *http.Request) {
 		jsonError(w, "change_number must not be empty", http.StatusBadRequest)
 		return
 	}
-
-	// Find or create the Change record.
-	var change models.Change
-	err = s.db.Where("change_number = ?", changeNumber).First(&change).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		change = models.Change{
-			ChangeNumber: changeNumber,
-			Status:       models.ChangeStatusNew,
-		}
-		if err := s.db.Create(&change).Error; err != nil {
-			jsonError(w, "failed to create change", http.StatusInternalServerError)
+	// All rows must belong to the same change to prevent silently attaching
+	// instances to the wrong record.
+	for i, row := range rows[1:] {
+		if row.changeNumber != changeNumber {
+			jsonError(w, fmt.Sprintf("CSV row %d: change_number %q does not match first row %q", i+3, row.changeNumber, changeNumber), http.StatusBadRequest)
 			return
 		}
-	} else if err != nil {
+	}
+
+	// Find or create the Change, then replace ChangeInstances — all in one transaction.
+	var change models.Change
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("change_number = ?", changeNumber).First(&change).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			change = models.Change{
+				ChangeNumber: changeNumber,
+				Status:       models.ChangeStatusNew,
+			}
+			if err := tx.Create(&change).Error; err != nil {
+				return err
+			}
+		}
+		if err := tx.Where("change_id = ?", change.ID).Delete(&models.ChangeInstance{}).Error; err != nil {
+			return err
+		}
+		for _, row := range rows {
+			ci := models.ChangeInstance{
+				ChangeID:   change.ID,
+				InstanceID: row.instanceID,
+				AccountID:  row.accountID,
+				Region:     row.region,
+				Platform:   row.platform,
+			}
+			if err := tx.Create(&ci).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
 		jsonError(w, "database error", http.StatusInternalServerError)
 		return
-	}
-
-	// Replace all ChangeInstances for this change.
-	if err := s.db.Where("change_id = ?", change.ID).Delete(&models.ChangeInstance{}).Error; err != nil {
-		jsonError(w, "failed to clear existing instances", http.StatusInternalServerError)
-		return
-	}
-	for _, row := range rows {
-		ci := models.ChangeInstance{
-			ChangeID:   change.ID,
-			InstanceID: row.instanceID,
-			AccountID:  row.accountID,
-			Region:     row.region,
-			Platform:   row.platform,
-		}
-		if err := s.db.Create(&ci).Error; err != nil {
-			jsonError(w, "failed to save instance", http.StatusInternalServerError)
-			return
-		}
 	}
 
 	// Load into session.
