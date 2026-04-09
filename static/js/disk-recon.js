@@ -51,7 +51,7 @@ async function runDiskRecon() {
     if (!/^\d{12}$/.test(_accountId))       errors.push('Account ID must be 12 digits');
     if (!_region)                             errors.push('Region is required');
     if (!_instanceId.startsWith('i-'))        errors.push('Instance ID must start with "i-"');
-    if (errors.length) { showError(errors.join(' | ')); return; }
+    if (errors.length) { hideResults(); showError(errors.join(' | ')); return; }
 
     hideError();
     hideResults();
@@ -101,15 +101,21 @@ async function runDiskRecon() {
 // ── Polling ────────────────────────────────────────────────────────────────────
 function startPolling() {
     if (!window.Utils || !window.Utils.createPolling) {
-        // Fallback: interval that respects doPoll's terminal signal.
-        const iv = setInterval(async () => {
+        // Fallback: serialized loop via setTimeout so a new doPoll is never
+        // scheduled before the previous one resolves (unlike setInterval).
+        let stopped = false;
+        let timer   = null;
+        const tick = async () => {
+            if (stopped) return;
             const done = await doPoll();
-            if (done) {
-                clearInterval(iv);
+            if (done || stopped) {
                 _polling = { stop: () => {} };
+                return;
             }
-        }, 4000);
-        _polling = { stop: () => clearInterval(iv) };
+            timer = setTimeout(tick, 4000);
+        };
+        _polling = { stop: () => { stopped = true; clearTimeout(timer); } };
+        timer = setTimeout(tick, 4000);
     } else {
         _polling = window.Utils.createPolling(async () => {
             const done = await doPoll();
