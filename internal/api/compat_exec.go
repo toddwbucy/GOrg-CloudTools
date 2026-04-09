@@ -327,12 +327,21 @@ func (s *Server) resolveUniformMeta(instanceIDs []string, sess *middleware.Sessi
 	seen := make(map[pair]struct{})
 	var resolved pair
 
+	// Instances present in the local inventory are resolved to their stored
+	// (account, region). Instances not yet synced (absent from byID) fall back
+	// to the session's account and home region — correct for the common case
+	// where the caller's credentials are scoped to a single account/region.
 	for _, id := range instanceIDs {
 		var p pair
 		if r, ok := byID[id]; ok {
 			p = pair{r.AccountID, r.RegionName}
 		} else {
 			p = pair{fallbackAccount, fallbackRegion}
+			slog.Debug("instance not in local inventory; using session fallback",
+				"instance_id", id,
+				"fallback_account", fallbackAccount,
+				"fallback_region", fallbackRegion,
+			)
 		}
 		seen[p] = struct{}{}
 		resolved = p // last wins; only used when len(seen)==1
