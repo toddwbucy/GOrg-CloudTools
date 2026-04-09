@@ -81,6 +81,12 @@ async function runDiskRecon() {
         const json = await resp.json();
         if (!resp.ok) { showError(json.error || `HTTP ${resp.status}`); setProgress(false); setInputsDisabled(false); return; }
 
+        if (!json.command_id) {
+            showError('Server did not return a command ID — check your AWS configuration.');
+            setProgress(false);
+            setInputsDisabled(false);
+            return;
+        }
         _commandId = json.command_id;
         setProgress(true, 'Command sent — waiting for SSM agent to pick it up…');
         startPolling();
@@ -95,8 +101,14 @@ async function runDiskRecon() {
 // ── Polling ────────────────────────────────────────────────────────────────────
 function startPolling() {
     if (!window.Utils || !window.Utils.createPolling) {
-        // Fallback: simple interval
-        const iv = setInterval(doPoll, 4000);
+        // Fallback: interval that respects doPoll's terminal signal.
+        const iv = setInterval(async () => {
+            const done = await doPoll();
+            if (done) {
+                clearInterval(iv);
+                _polling = { stop: () => {} };
+            }
+        }, 4000);
         _polling = { stop: () => clearInterval(iv) };
     } else {
         _polling = window.Utils.createPolling(async () => {

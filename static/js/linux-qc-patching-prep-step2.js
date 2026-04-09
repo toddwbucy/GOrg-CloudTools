@@ -37,24 +37,9 @@ function populateStep2KernelGroups(kernelGroups) {
         return;
     }
     
-    // All instances in kernel groups have already passed QC
-    const totalFailed = 0;
-    
+    // Server pre-filters kernel groups to only include instances that passed QC.
     // First show the kernel groups card (moved from Step 1)
-    let html = '';
-    
-    // Show warning if some instances failed QC
-    if (totalFailed > 0) {
-        html += `
-            <div class="alert alert-info mb-3">
-                <i class="bi bi-info-circle me-2"></i>
-                <strong>${totalFailed} instance(s) excluded from Step 2</strong> due to failing one or more QC checks 
-                (Repository Check, Disk Space Check, or CrowdStrike not running).
-            </div>
-        `;
-    }
-    
-    html += `
+    let html = `
         <div class="card bg-light mb-3">
             <div class="card-header">
                 <h6 class="mb-0"><i class="bi bi-cpu me-2"></i>Kernel Groups Detected</h6>
@@ -131,14 +116,15 @@ function populateStep2KernelGroups(kernelGroups) {
 
 // New function to handle group selection in Step 2
 function selectGroupForStaging(event, groupKey) {
-    // Accept event as first parameter
-    const selectElement = document.querySelector(`.kernel-select[data-group="${groupKey}"]`);
+    // Use dataset comparison to avoid CSS selector injection via groupKey.
+    const selectElement = Array.from(document.querySelectorAll('.kernel-select'))
+        .find(el => el.dataset.group === groupKey) || null;
     if (!selectElement) {
         console.error(`Kernel select element not found for group: ${groupKey}`);
         showToast('Internal error: Kernel selection element not found', 'danger');
         return;
     }
-    const selectedKernel = selectElement ? selectElement.value : '';
+    const selectedKernel = selectElement.value;
     if (!selectedKernel) {
         showToast('Please select a kernel version first', 'warning');
         return;
@@ -225,33 +211,64 @@ async function executeStep2AllGroups() {
         if (response.ok) {
             showToast(`Step 2 kernel staging started: ${data.execution_count} instances across ${data.execution_groups} execution group(s)`, 'success');
             
-            // Show results
+            // Show results — built via DOM to avoid injecting raw server values.
             const resultsDiv = document.getElementById('step2-results');
             if (resultsDiv) {
-                let groupsHtml = '';
+                resultsDiv.replaceChildren();
+
+                const alert = document.createElement('div');
+                alert.className = 'alert alert-success';
+
+                const heading = document.createElement('h6');
+                const icon = document.createElement('i');
+                icon.className = 'bi bi-check-circle me-2';
+                heading.appendChild(icon);
+                heading.appendChild(document.createTextNode('Kernel Staging Started'));
+
+                const pBatch = document.createElement('p');
+                pBatch.appendChild(document.createTextNode('Master Batch ID: '));
+                const code = document.createElement('code');
+                code.textContent = data.master_batch_id;
+                pBatch.appendChild(code);
+
+                const pCount = document.createElement('p');
+                pCount.textContent = `Total instances: ${data.execution_count}`;
+
+                const pGroups = document.createElement('p');
+                pGroups.textContent = `Execution groups: ${data.execution_groups} (grouped by account/region/kernel)`;
+
+                alert.append(heading, pBatch, pCount, pGroups);
+
                 if (data.groups && data.groups.length > 0) {
-                    groupsHtml = '<div class="mt-3"><h6>Execution Groups:</h6><ul class="small">';
+                    const groupsWrap = document.createElement('div');
+                    groupsWrap.className = 'mt-3';
+                    const groupsTitle = document.createElement('h6');
+                    groupsTitle.textContent = 'Execution Groups:';
+                    const ul = document.createElement('ul');
+                    ul.className = 'small';
                     data.groups.forEach(g => {
-                        groupsHtml += `<li>Account ${g.account}, Region ${g.region}: ${g.instances} instance(s) → kernel ${escapeHtml(g.kernel)}</li>`;
+                        const li = document.createElement('li');
+                        li.textContent = `Account ${g.account}, Region ${g.region}: ${g.instances} instance(s) → kernel ${g.kernel}`;
+                        ul.appendChild(li);
                     });
-                    groupsHtml += '</ul></div>';
+                    groupsWrap.append(groupsTitle, ul);
+                    alert.appendChild(groupsWrap);
                 }
-                
-                resultsDiv.innerHTML = `
-                    <div class="alert alert-success">
-                        <h6><i class="bi bi-check-circle me-2"></i>Kernel Staging Started</h6>
-                        <p>Master Batch ID: <code>${data.master_batch_id}</code></p>
-                        <p>Total instances: ${data.execution_count}</p>
-                        <p>Execution groups: ${data.execution_groups} (grouped by account/region/kernel)</p>
-                        ${groupsHtml}
-                        <div class="mt-2">
-                            <small class="text-muted">
-                                <i class="bi bi-info-circle me-1"></i>
-                                Instances in the same account/region with the same kernel are executed together for efficiency.
-                            </small>
-                        </div>
-                    </div>
-                `;
+
+                const note = document.createElement('div');
+                note.className = 'mt-2';
+                const small = document.createElement('small');
+                small.className = 'text-muted';
+                const noteIcon = document.createElement('i');
+                noteIcon.className = 'bi bi-info-circle me-1';
+                small.appendChild(noteIcon);
+                small.appendChild(document.createTextNode(
+                    'Instances in the same account/region with the same kernel are executed together for efficiency.'
+                ));
+                note.appendChild(small);
+                alert.appendChild(note);
+
+                resultsDiv.appendChild(alert);
             }
             
             // Start polling for results using the master batch ID
@@ -261,6 +278,15 @@ async function executeStep2AllGroups() {
             }
         } else {
             showToast(data.detail || 'Failed to start kernel staging', 'danger');
+            // Re-enable button on server-side error so the user can retry.
+            if (btn) {
+                btn.disabled = false;
+                btn.textContent = '';
+                const retryIcon = document.createElement('i');
+                retryIcon.className = 'bi bi-gear-wide-connected me-2';
+                btn.appendChild(retryIcon);
+                btn.appendChild(document.createTextNode('Stage All Groups'));
+            }
             
             // Show error details
             const resultsDiv = document.getElementById('step2-results');
