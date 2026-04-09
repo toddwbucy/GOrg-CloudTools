@@ -27,6 +27,7 @@ type Session struct {
 	AWSSessionToken    string    `json:"st,omitempty"`
 	AWSEnvironment     string    `json:"env,omitempty"` // "com" or "gov"
 	AWSAccountID       string    `json:"aid,omitempty"` // account ID from STS GetCallerIdentity
+	CurrentChangeID    uint      `json:"cid,omitempty"` // active change-management record
 	CreatedAt          time.Time `json:"ca"`
 }
 
