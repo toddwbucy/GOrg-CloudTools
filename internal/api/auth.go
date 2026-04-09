@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"net/http"
 	"strings"
 
@@ -29,27 +30,31 @@ type awsCredentialsRequest struct {
 //
 // FormData field names match the auth page HTML:
 //
-//	access_key   → AccessKeyID
-//	secret_key   → SecretAccessKey
+//	access_key    → AccessKeyID
+//	secret_key    → SecretAccessKey
 //	session_token → SessionToken
-//	environment  → Environment
-//	region       → Region (optional)
-func decodeCredentialsRequest(r *http.Request) (awsCredentialsRequest, error) {
-	ct := r.Header.Get("Content-Type")
-	if strings.Contains(ct, "multipart/form-data") || strings.Contains(ct, "application/x-www-form-urlencoded") {
-		// 1 MB limit — credentials are tiny; this prevents memory exhaustion.
+//	environment   → Environment
+//	region        → Region (optional)
+//
+// r.PostFormValue is used (not r.FormValue) to read only from the request body,
+// preventing credentials from being supplied via URL query parameters.
+func decodeCredentialsRequest(w http.ResponseWriter, r *http.Request) (awsCredentialsRequest, error) {
+	mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if mediaType == "multipart/form-data" || mediaType == "application/x-www-form-urlencoded" {
+		// Cap total body size before any parsing to prevent memory exhaustion.
+		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 		if err := r.ParseMultipartForm(1 << 20); err != nil {
 			// Fall back to ParseForm for urlencoded bodies.
 			if ferr := r.ParseForm(); ferr != nil {
-				return awsCredentialsRequest{}, fmt.Errorf("failed to parse form: %w", err)
+				return awsCredentialsRequest{}, fmt.Errorf("failed to parse form: %w", ferr)
 			}
 		}
 		return awsCredentialsRequest{
-			AccessKeyID:     strings.TrimSpace(r.FormValue("access_key")),
-			SecretAccessKey: strings.TrimSpace(r.FormValue("secret_key")),
-			SessionToken:    strings.TrimSpace(r.FormValue("session_token")),
-			Environment:     strings.TrimSpace(r.FormValue("environment")),
-			Region:          strings.TrimSpace(r.FormValue("region")),
+			AccessKeyID:     strings.TrimSpace(r.PostFormValue("access_key")),
+			SecretAccessKey: strings.TrimSpace(r.PostFormValue("secret_key")),
+			SessionToken:    strings.TrimSpace(r.PostFormValue("session_token")),
+			Environment:     strings.TrimSpace(r.PostFormValue("environment")),
+			Region:          strings.TrimSpace(r.PostFormValue("region")),
 		}, nil
 	}
 	var req awsCredentialsRequest
@@ -63,7 +68,7 @@ func decodeCredentialsRequest(r *http.Request) (awsCredentialsRequest, error) {
 // and stores them in an encrypted session cookie.
 // Accepts both application/json and multipart/form-data.
 func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request) {
-	req, err := decodeCredentialsRequest(r)
+	req, err := decodeCredentialsRequest(w, r)
 	if err != nil {
 		jsonError(w, err.Error(), http.StatusBadRequest)
 		return

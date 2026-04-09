@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -439,6 +440,35 @@ func TestGetAwsAuthenticate_ReturnsSessionStatus(t *testing.T) {
 	decodeJSON(t, res, &body)
 	if _, ok := body["authenticated"]; !ok {
 		t.Error("GET /aws/authenticate: response missing 'authenticated' field")
+	}
+}
+
+func TestCreateCredentials_Urlencoded_AwsAuthenticate(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	form := url.Values{
+		"access_key":    {"AKIAIOSFODNN7EXAMPLE"},
+		"secret_key":    {"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"},
+		"session_token": {"token"},
+		"environment":   {"com"},
+	}
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate",
+		strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/authenticate urlencoded: want 200, got %d", res.StatusCode)
+	}
+	var resp map[string]string
+	decodeJSON(t, res, &resp)
+	if resp["account_id"] != "dev-mode" {
+		t.Errorf("account_id: want dev-mode, got %q", resp["account_id"])
 	}
 }
 
