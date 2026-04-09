@@ -135,6 +135,9 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("POST /api/exec/tool",
 		execRL.Wrap(http.HandlerFunc(s.handleExecuteTool)))
 
+	// ── Script runner compat ──────────────────────────────────────────────────
+	s.registerScriptRunnerCompatRoutes(execRL, readRL)
+
 	// ── Change management aliases (per-tool namespace) ─────────────────────────
 	// Each tool that embeds change-management.js sets toolEndpoint to its prefix
 	// and calls load-change, list-changes, save-change-with-instances, etc.
