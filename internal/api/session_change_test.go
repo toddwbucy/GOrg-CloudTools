@@ -385,7 +385,26 @@ func TestClearChange_ClearsSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST load-change: %v", err)
 	}
+	if res.StatusCode != http.StatusOK {
+		res.Body.Close()
+		t.Fatalf("POST load-change: expected 200, got %d", res.StatusCode)
+	}
 	res.Body.Close()
+
+	// Verify the change is actually in the session before we clear it.
+	resCheck, err := client.Get(ts.URL + "/aws/script-runner/current-change")
+	if err != nil {
+		t.Fatalf("GET current-change before clear: %v", err)
+	}
+	if resCheck.StatusCode != http.StatusOK {
+		resCheck.Body.Close()
+		t.Fatalf("expected change loaded in session before clear, got %d", resCheck.StatusCode)
+	}
+	var loaded models.Change
+	decodeJSON(t, resCheck, &loaded)
+	if loaded.ID != change.ID {
+		t.Fatalf("session contains change %d, expected %d", loaded.ID, change.ID)
+	}
 
 	// Clear it.
 	res2, err := client.Post(ts.URL+"/aws/script-runner/clear-change", "application/json", nil)
