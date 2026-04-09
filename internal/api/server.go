@@ -135,6 +135,18 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("POST /api/exec/tool",
 		execRL.Wrap(http.HandlerFunc(s.handleExecuteTool)))
 
+	// ── Change management aliases (per-tool namespace) ─────────────────────────
+	// Each tool that embeds change-management.js sets toolEndpoint to its prefix
+	// and calls load-change, list-changes, save-change-with-instances, etc.
+	for _, prefix := range []string{
+		"/aws/script-runner",
+		"/aws/rhsa-compliance",
+		"/aws/linux-qc-prep",
+		"/aws/linux-qc-post",
+	} {
+		s.registerChangeManagementRoutes(prefix, readRL, writeRL)
+	}
+
 	// ── Static files ──────────────────────────────────────────────────────────
 	// STATIC_DIR is configurable so the server works correctly in containers and
 	// systemd units where the working directory may differ from the binary location.
