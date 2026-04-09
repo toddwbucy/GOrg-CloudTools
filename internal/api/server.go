@@ -69,6 +69,16 @@ func (s *Server) registerRoutes() {
 	s.mux.Handle("GET /api/auth/aws-check-credentials",
 		readRL.Wrap(http.HandlerFunc(s.handleCheckServerCredentials)))
 
+	// ── Auth aliases (frontend compat) ────────────────────────────────────────
+	// The auth page posts to /aws/authenticate; aws-credentials.js posts to
+	// /aws/script-runner/accounts. Both accept multipart/form-data.
+	s.mux.Handle("POST /aws/authenticate",
+		authRL.Wrap(http.HandlerFunc(s.handleCreateCredentials)))
+	s.mux.Handle("POST /aws/script-runner/accounts",
+		authRL.Wrap(http.HandlerFunc(s.handleCreateCredentials)))
+	// GET /aws/authenticate is used by JS to poll session status.
+	s.mux.HandleFunc("GET /aws/authenticate", s.handleSessionStatus)
+
 	// ── Script execution primitives ───────────────────────────────────────────
 	s.mux.Handle("POST /api/exec/script",
 		execRL.Wrap(http.HandlerFunc(s.handleExecScript)))

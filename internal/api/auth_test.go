@@ -1,7 +1,10 @@
 package api_test
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -349,6 +352,213 @@ func TestCheckServerCredentials_NoServerCreds(t *testing.T) {
 	envs, _ := body["available_environments"].([]any)
 	if len(envs) != 0 {
 		t.Errorf("available_environments: want empty, got %v", envs)
+	}
+}
+
+// ── Phase 4.2 — FormData alias routes ────────────────────────────────────────
+
+// multipartBody builds a multipart/form-data body from key-value pairs and
+// returns the body and the correct Content-Type (with boundary).
+func multipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			t.Fatalf("WriteField %s: %v", k, err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	return &buf, w.FormDataContentType()
+}
+
+func TestCreateCredentials_FormData_AwsAuthenticate(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":    "AKIAIOSFODNN7EXAMPLE",
+		"secret_key":    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"session_token": "token",
+		"environment":   "com",
+	})
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate", body)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", ct)
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/authenticate FormData: want 200, got %d", res.StatusCode)
+	}
+	var resp map[string]string
+	decodeJSON(t, res, &resp)
+	if resp["account_id"] != "dev-mode" {
+		t.Errorf("account_id: want dev-mode, got %q", resp["account_id"])
+	}
+}
+
+func TestCreateCredentials_FormData_ScriptRunnerAccounts(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":    "AKIAIOSFODNN7EXAMPLE",
+		"secret_key":    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"session_token": "token",
+		"environment":   "com",
+	})
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/aws/script-runner/accounts", body)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", ct)
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/script-runner/accounts FormData: want 200, got %d", res.StatusCode)
+	}
+}
+
+func TestGetAwsAuthenticate_ReturnsSessionStatus(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	res, err := http.Get(ts.URL + "/aws/authenticate")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("GET /aws/authenticate: want 200, got %d", res.StatusCode)
+	}
+	var body map[string]any
+	decodeJSON(t, res, &body)
+	if _, ok := body["authenticated"]; !ok {
+		t.Error("GET /aws/authenticate: response missing 'authenticated' field")
+	}
+}
+
+func TestCreateCredentials_Urlencoded_AwsAuthenticate(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	form := url.Values{
+		"access_key":    {"AKIAIOSFODNN7EXAMPLE"},
+		"secret_key":    {"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"},
+		"session_token": {"token"},
+		"environment":   {"com"},
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate",
+		strings.NewReader(form.Encode()))
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/authenticate urlencoded: want 200, got %d", res.StatusCode)
+	}
+	var resp map[string]string
+	decodeJSON(t, res, &resp)
+	if resp["account_id"] != "dev-mode" {
+		t.Errorf("account_id: want dev-mode, got %q", resp["account_id"])
+	}
+}
+
+func TestCreateCredentials_FormData_MissingFields(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	// Missing secret_key — should be 400.
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":  "AKIAIOSFODNN7EXAMPLE",
+		"environment": "com",
+	})
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate", body)
+	if err != nil {
+		t.Fatalf("failed to create request: %v", err)
+	}
+	req.Header.Set("Content-Type", ct)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("FormData missing secret_key: want 400, got %d", res.StatusCode)
+	}
+}
+
+// TestAuthRateLimit_SharedAcrossAliases verifies that the three credential
+// endpoints share the same authRL token bucket: requests to
+// /api/auth/aws-credentials, /aws/authenticate, and /aws/script-runner/accounts
+// all draw from the same per-IP pool and trigger 429 once it is exhausted.
+func TestAuthRateLimit_SharedAcrossAliases(t *testing.T) {
+	db := newTestDB(t)
+	// "2/minute" → burst=2, so the first 2 requests succeed and the 3rd is 429.
+	ts := newTestServerWithConfig(t, db, &config.Config{
+		SecretKey:              "test-secret-key-32-bytes-minimum!!",
+		Environment:            "development",
+		DevMode:                true,
+		SessionLifetimeMinutes: 60,
+		RateLimitAuth:          "2/minute",
+		RateLimitExecution:     "1000/minute",
+		RateLimitRead:          "1000/minute",
+		RateLimitWrite:         "1000/minute",
+		StaticDir:              t.TempDir(),
+	})
+	client := newTestClient(t)
+
+	validForm := map[string]string{
+		"access_key":    "AKIAIOSFODNN7EXAMPLE",
+		"secret_key":    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"session_token": "token",
+		"environment":   "com",
+	}
+
+	send := func(endpoint string) int {
+		body, ct := multipartBody(t, validForm)
+		req, err := http.NewRequest(http.MethodPost, ts.URL+endpoint, body)
+		if err != nil {
+			t.Fatalf("failed to create request: %v", err)
+		}
+		req.Header.Set("Content-Type", ct)
+		res, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("POST %s: %v", endpoint, err)
+		}
+		res.Body.Close()
+		return res.StatusCode
+	}
+
+	// First two requests (to different alias endpoints) should consume the bucket.
+	if got := send("/api/auth/aws-credentials"); got == http.StatusTooManyRequests {
+		t.Fatal("request 1 to /api/auth/aws-credentials: unexpectedly rate-limited on first request")
+	}
+	if got := send("/aws/authenticate"); got == http.StatusTooManyRequests {
+		t.Fatal("request 2 to /aws/authenticate: unexpectedly rate-limited on second request")
+	}
+
+	// Third request (to the third alias) must be rate-limited.
+	if got := send("/aws/script-runner/accounts"); got != http.StatusTooManyRequests {
+		t.Errorf("request 3 to /aws/script-runner/accounts: want 429, got %d — authRL bucket not shared across aliases", got)
 	}
 }
 
