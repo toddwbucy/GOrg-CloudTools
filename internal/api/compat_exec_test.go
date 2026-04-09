@@ -8,6 +8,11 @@ import (
 	"github.com/toddwbucy/GOrg-CloudTools/internal/db/models"
 )
 
+// testCallerKey is the AWS access-key ID posted by authAndStore. Batches seeded
+// directly via db.Create must set CallerKey to this value so the strict
+// caller_key = ? ownership filter in the results/download handlers matches them.
+const testCallerKey = "AKIAIOSFODNN7EXAMPLE"
+
 // ── validate-script ───────────────────────────────────────────────────────────
 
 func TestValidateScript_NoWarnings(t *testing.T) {
@@ -182,6 +187,7 @@ func TestScriptRunnerResults_Shape(t *testing.T) {
 		ScriptID:       script.ID,
 		TotalInstances: 2,
 		Status:         models.BatchStatusRunning,
+		CallerKey:      testCallerKey,
 	}
 	if err := db.Create(&batch).Error; err != nil {
 		t.Fatalf("seed batch: %v", err)
@@ -294,6 +300,7 @@ func TestDownloadResults_Formats(t *testing.T) {
 	}
 	batch := models.ExecutionBatch{
 		ScriptID: script.ID, TotalInstances: 1, Status: models.BatchStatusCompleted,
+		CallerKey: testCallerKey,
 	}
 	if err := db.Create(&batch).Error; err != nil {
 		t.Fatalf("seed batch: %v", err)

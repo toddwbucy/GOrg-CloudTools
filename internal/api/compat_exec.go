@@ -20,6 +20,11 @@ import (
 	"gorm.io/gorm"
 )
 
+// errCrossRegion is returned by resolveUniformMeta when instance IDs resolve to
+// more than one (account, region) pair. The caller uses errors.Is to distinguish
+// this validation failure (400) from DB errors (500).
+var errCrossRegion = errors.New("instances span multiple account/region pairs; submit separate requests per region")
+
 // ── test-connectivity ─────────────────────────────────────────────────────────
 
 type connectivityRequest struct {
@@ -205,10 +210,14 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 
 	// Resolve and validate that all instances share the same account/region.
 	// SSM is region-scoped: a single SendCommand can only target instances in
-	// the caller's region. Return 400 early rather than letting SSM fail silently.
+	// the caller's region. Return 400 for cross-region requests, 500 for DB errors.
 	accountID, region, err := s.resolveUniformMeta(req.InstanceIDs, sess)
 	if err != nil {
-		jsonError(w, err.Error(), http.StatusBadRequest)
+		if errors.Is(err, errCrossRegion) {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+		} else {
+			jsonError(w, "failed to resolve instance metadata", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -274,12 +283,14 @@ func (s *Server) resolveUniformMeta(instanceIDs []string, sess *middleware.Sessi
 		RegionName string
 	}
 	var rows []dbRow
-	s.db.Model(&models.Instance{}).
+	if err := s.db.Model(&models.Instance{}).
 		Select("instances.instance_id, accounts.account_id as account_id, regions.name as region_name").
 		Joins("JOIN regions ON instances.region_id = regions.id").
 		Joins("JOIN accounts ON regions.account_id = accounts.id").
 		Where("instances.instance_id IN ?", instanceIDs).
-		Scan(&rows)
+		Scan(&rows).Error; err != nil {
+		return "", "", fmt.Errorf("resolving instance metadata: %w", err)
+	}
 
 	// Build a lookup table.
 	byID := make(map[string]dbRow, len(rows))
@@ -306,7 +317,7 @@ func (s *Server) resolveUniformMeta(instanceIDs []string, sess *middleware.Sessi
 	}
 
 	if len(seen) > 1 {
-		return "", "", fmt.Errorf("instances span multiple account/region pairs; submit separate requests per region")
+		return "", "", errCrossRegion
 	}
 	return resolved.account, resolved.region, nil
 }
@@ -328,10 +339,8 @@ func homeRegion(env string) string {
 func (s *Server) handleScriptRunnerResults(w http.ResponseWriter, r *http.Request) {
 	sess := middleware.GetSession(r)
 	var batch models.ExecutionBatch
-	// Scope to batches owned by this caller; legacy batches (empty caller_key)
-	// remain accessible for backward compatibility.
 	err := s.db.Preload("Executions").
-		Where("id = ? AND (caller_key = '' OR caller_key = ?)", r.PathValue("batch_id"), sess.AWSAccessKeyID).
+		Where("id = ? AND caller_key = ?", r.PathValue("batch_id"), sess.AWSAccessKeyID).
 		First(&batch).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -343,10 +352,11 @@ func (s *Server) handleScriptRunnerResults(w http.ResponseWriter, r *http.Reques
 	}
 
 	counts := map[string]int{
-		"pending":   0,
-		"running":   0,
-		"completed": 0,
-		"failed":    0,
+		"pending":     0,
+		"running":     0,
+		"completed":   0,
+		"failed":      0,
+		"interrupted": 0,
 	}
 	type resultRow struct {
 		InstanceID string  `json:"instance_id"`
@@ -390,10 +400,8 @@ func (s *Server) handleScriptRunnerResults(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleDownloadResults(w http.ResponseWriter, r *http.Request) {
 	sess := middleware.GetSession(r)
 	var batch models.ExecutionBatch
-	// Scope to batches owned by this caller; legacy batches (empty caller_key)
-	// remain accessible for backward compatibility.
 	err := s.db.Preload("Executions").
-		Where("id = ? AND (caller_key = '' OR caller_key = ?)", r.PathValue("batch_id"), sess.AWSAccessKeyID).
+		Where("id = ? AND caller_key = ?", r.PathValue("batch_id"), sess.AWSAccessKeyID).
 		First(&batch).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
