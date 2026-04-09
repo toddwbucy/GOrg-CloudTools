@@ -913,8 +913,14 @@ func (s *Server) handleQCLatestStep1Results(w http.ResponseWriter, r *http.Reque
 	sess := middleware.GetSession(r)
 	ch, err := s.loadSessionChange(sess)
 	if err != nil {
-		// No change loaded — return empty success so the page can load normally.
-		jsonOK(w, map[string]any{"status": "no_change", "kernel_groups": map[string]any{}})
+		if sess.CurrentChangeID == 0 || errors.Is(err, gorm.ErrRecordNotFound) {
+			// No change loaded, or the change was deleted after session was written —
+			// return empty success so the page can load normally.
+			jsonOK(w, map[string]any{"status": "no_change", "kernel_groups": map[string]any{}})
+		} else {
+			slog.Error("latest-step1-results: loadSessionChange failed", "err", err)
+			jsonError(w, "database error", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -922,11 +928,15 @@ func (s *Server) handleQCLatestStep1Results(w http.ResponseWriter, r *http.Reque
 	// change_number AND were run as step1 (identified via execution_metadata).
 	// SQLite's json_extract is the only way to query the serialised map field.
 	var batchID uint
-	s.db.Raw(`
+	if err := s.db.Raw(`
 		SELECT batch_id FROM executions
 		WHERE change_number = ?
 		  AND json_extract(execution_metadata, '$.qc_step') = 'step1_initial_qc'
-		ORDER BY created_at DESC LIMIT 1`, ch.ChangeNumber).Scan(&batchID)
+		ORDER BY created_at DESC LIMIT 1`, ch.ChangeNumber).Scan(&batchID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		slog.Error("latest-step1-results: batch lookup failed", "change_number", ch.ChangeNumber, "err", err)
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
 
 	if batchID == 0 {
 		jsonOK(w, map[string]any{"status": "no_results", "kernel_groups": map[string]any{}})
@@ -1207,9 +1217,18 @@ func (s *Server) handleSFTExecScript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	region := req.InstanceConfig.Region
-	accountID := req.InstanceConfig.AccountNumber
+	region := strings.TrimSpace(req.InstanceConfig.Region)
+	accountID := strings.TrimSpace(req.InstanceConfig.AccountNumber)
 	instanceID := req.InstanceConfig.InstanceID
+
+	if region == "" {
+		jsonError(w, "instance_config.region is required", http.StatusBadRequest)
+		return
+	}
+	if accountID == "" {
+		jsonError(w, "instance_config.account_number is required", http.StatusBadRequest)
+		return
+	}
 
 	sess := middleware.GetSession(r)
 	batchID, err := s.startToolJob(r, script, platform, accountID, region, "", sess.AWSAccessKeyID, []string{instanceID})
@@ -1366,7 +1385,7 @@ var terminalSSMStatuses = map[string]bool{
 // The frontend uses the `terminal` flag to know when to stop polling.
 //
 // Route: GET /aws/disk-recon/poll/{command_id}
-// Query params: instance_id, account_id, region (required)
+// Query params: instance_id, region (required)
 func (s *Server) handleDiskReconPoll(w http.ResponseWriter, r *http.Request) {
 	commandID := r.PathValue("command_id")
 	q := r.URL.Query()

@@ -410,6 +410,52 @@ func TestSFTExecScript_InvalidScriptType(t *testing.T) {
 	}
 }
 
+func TestSFTExecScript_MissingRegion(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/sft-fixer/execute-script", "application/json",
+		jsonBody(t, map[string]any{
+			"instance_config": map[string]any{
+				"instance_id": "i-aaa", "account_number": "123456789012",
+				// region omitted
+			},
+			"script_type": "sft_detect",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing region, got %d", res.StatusCode)
+	}
+}
+
+func TestSFTExecScript_MissingAccountNumber(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/sft-fixer/execute-script", "application/json",
+		jsonBody(t, map[string]any{
+			"instance_config": map[string]any{
+				"instance_id": "i-aaa", "region": "us-east-1",
+				// account_number omitted
+			},
+			"script_type": "sft_detect",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing account_number, got %d", res.StatusCode)
+	}
+}
+
 func TestSFTBatchStatus_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
