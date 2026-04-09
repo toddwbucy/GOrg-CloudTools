@@ -114,8 +114,16 @@ func TestLoadChange_Success(t *testing.T) {
 // tool namespace that embeds change-management.js.
 func TestLoadChange_AllToolPrefixes(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+
+	// Seed a real change so we can verify a successful load on each prefix,
+	// not just that the route is registered (a 404 from a missing route and a
+	// 404 from a missing record are indistinguishable otherwise).
+	change := models.Change{ChangeNumber: "CHG-PREFIX", Status: models.ChangeStatusNew}
+	if err := db.Create(&change).Error; err != nil {
+		t.Fatalf("seed change: %v", err)
+	}
 
 	prefixes := []string{
 		"/aws/script-runner",
@@ -124,14 +132,22 @@ func TestLoadChange_AllToolPrefixes(t *testing.T) {
 		"/aws/linux-qc-post",
 	}
 	for _, prefix := range prefixes {
-		res, err := client.Post(ts.URL+prefix+"/load-change/1", "application/json", nil)
+		res, err := client.Post(
+			fmt.Sprintf("%s%s/load-change/%d", ts.URL, prefix, change.ID),
+			"application/json", nil,
+		)
 		if err != nil {
 			t.Fatalf("%s: POST: %v", prefix, err)
 		}
-		res.Body.Close()
-		// Should be 404 (change doesn't exist), not 405 (route not found).
-		if res.StatusCode != http.StatusNotFound {
-			t.Errorf("%s: expected 404 (no change), got %d", prefix, res.StatusCode)
+		if res.StatusCode != http.StatusOK {
+			res.Body.Close()
+			t.Errorf("%s: expected 200, got %d", prefix, res.StatusCode)
+			continue
+		}
+		var body map[string]any
+		decodeJSON(t, res, &body)
+		if id, ok := body["change_id"].(float64); !ok || uint(id) != change.ID {
+			t.Errorf("%s: expected change_id=%d, got %v", prefix, change.ID, body["change_id"])
 		}
 	}
 }
@@ -267,7 +283,9 @@ func TestSaveChangeWithInstances_CreatesAndLoads(t *testing.T) {
 
 	// Verify instances were stored.
 	var count int64
-	db.Model(&models.ChangeInstance{}).Where("change_id = ?", uint(changeID)).Count(&count)
+	if res := db.Model(&models.ChangeInstance{}).Where("change_id = ?", uint(changeID)).Count(&count); res.Error != nil {
+		t.Fatalf("count query failed: %v", res.Error)
+	}
 	if count != 2 {
 		t.Errorf("expected 2 instances, got %d", count)
 	}
@@ -340,7 +358,9 @@ func TestSaveChangeWithInstances_ReplacesInstances(t *testing.T) {
 
 	changeID := uint(rawID)
 	var count int64
-	db.Model(&models.ChangeInstance{}).Where("change_id = ?", changeID).Count(&count)
+	if res := db.Model(&models.ChangeInstance{}).Where("change_id = ?", changeID).Count(&count); res.Error != nil {
+		t.Fatalf("count query failed: %v", res.Error)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 instance after replacement, got %d", count)
 	}
@@ -355,7 +375,9 @@ func TestClearChange_ClearsSession(t *testing.T) {
 
 	// Load a change first.
 	change := models.Change{ChangeNumber: "CHG-CLEAR", Status: models.ChangeStatusNew}
-	db.Create(&change)
+	if err := db.Create(&change).Error; err != nil {
+		t.Fatalf("seed change: %v", err)
+	}
 	res, err := client.Post(
 		fmt.Sprintf("%s/aws/script-runner/load-change/%d", ts.URL, change.ID),
 		"application/json", nil,
