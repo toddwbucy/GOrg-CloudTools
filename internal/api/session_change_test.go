@@ -206,22 +206,36 @@ func TestListChangesAlias_Shape(t *testing.T) {
 		t.Fatalf("expected 2 changes, got %d", len(got))
 	}
 
-	// Find CHG0001 in results and verify instance_count.
+	// Verify instance_count for both changes.
 	foundCHG0001 := false
+	foundCHG0002 := false
 	for _, item := range got {
-		if item["change_number"] == "CHG0001" {
+		switch item["change_number"] {
+		case "CHG0001":
 			foundCHG0001 = true
 			count, ok := item["instance_count"].(float64)
 			if !ok {
-				t.Fatalf("instance_count is not a number: %T", item["instance_count"])
+				t.Fatalf("CHG0001: instance_count is not a number: %T", item["instance_count"])
 			}
 			if count != 2 {
 				t.Errorf("CHG0001: expected instance_count=2, got %v", count)
+			}
+		case "CHG0002":
+			foundCHG0002 = true
+			count, ok := item["instance_count"].(float64)
+			if !ok {
+				t.Fatalf("CHG0002: instance_count is not a number: %T", item["instance_count"])
+			}
+			if count != 0 {
+				t.Errorf("CHG0002: expected instance_count=0, got %v", count)
 			}
 		}
 	}
 	if !foundCHG0001 {
 		t.Fatalf("CHG0001 not found in list-changes response")
+	}
+	if !foundCHG0002 {
+		t.Fatalf("CHG0002 not found in list-changes response")
 	}
 }
 
