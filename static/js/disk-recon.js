@@ -81,13 +81,13 @@ async function runDiskRecon() {
         const json = await resp.json();
         if (!resp.ok) { showError(json.error || `HTTP ${resp.status}`); setProgress(false); setInputsDisabled(false); return; }
 
-        if (!json.command_id) {
-            showError('Server did not return a command ID — check your AWS configuration.');
+        if (typeof json.command_id !== 'string' || json.command_id.trim().length === 0) {
+            showError('Server did not return a valid command ID — check your AWS configuration.');
             setProgress(false);
             setInputsDisabled(false);
             return;
         }
-        _commandId = json.command_id;
+        _commandId = json.command_id.trim();
         setProgress(true, 'Command sent — waiting for SSM agent to pick it up…');
         startPolling();
 
