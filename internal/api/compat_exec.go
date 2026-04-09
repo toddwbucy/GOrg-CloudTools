@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -53,6 +54,19 @@ func (s *Server) handleTestConnectivity(w http.ResponseWriter, r *http.Request) 
 	}
 
 	sess := middleware.GetSession(r)
+
+	// Validate region uniformity before building the SSM client — consistent
+	// with handleScriptRunnerExec. Cross-region IDs would silently appear
+	// unreachable otherwise.
+	if _, _, err := s.resolveUniformMeta(req.InstanceIDs, sess); err != nil {
+		if errors.Is(err, errCrossRegion) {
+			jsonError(w, err.Error(), http.StatusBadRequest)
+		} else {
+			jsonError(w, "failed to resolve instance metadata", http.StatusInternalServerError)
+		}
+		return
+	}
+
 	cfg, _, err := awscreds.FromSession(r.Context(), sess)
 	if err != nil {
 		jsonError(w, "no valid AWS credentials in session", http.StatusUnauthorized)
@@ -233,12 +247,16 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 
 	// If requested, persist the script as a library entry (non-ephemeral) and
 	// reference it by ID so the execution record points to the saved script.
-	if req.SaveToLibrary && req.Name != "" {
+	if req.SaveToLibrary {
+		name := strings.TrimSpace(req.Name)
+		if name == "" {
+			jsonError(w, "name is required when save_to_library is true", http.StatusBadRequest)
+			return
+		}
 		scriptType := "bash"
 		if interpreter == "powershell" {
 			scriptType = "powershell"
 		}
-		name := strings.TrimSpace(req.Name)
 		script := models.Script{
 			Name:        name,
 			Content:     req.Content,
@@ -256,7 +274,11 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 
 	jobID, err := runner.Start(r.Context(), cfg, execReq)
 	if err != nil {
-		jsonError(w, err.Error(), http.StatusBadRequest)
+		// All client-facing validation (content, instance_ids, interpreter,
+		// region uniformity, save_to_library name) is done before this call.
+		// Any error from Start is an internal failure (DB write, SSM setup).
+		slog.Error("runner.Start failed", "err", err)
+		jsonError(w, "failed to start execution", http.StatusInternalServerError)
 		return
 	}
 

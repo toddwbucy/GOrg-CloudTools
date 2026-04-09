@@ -123,9 +123,11 @@ func TestScriptRunnerExec_MissingFields(t *testing.T) {
 	authAndStore(t, client, ts.URL)
 
 	cases := []map[string]any{
-		{"content": "", "instance_ids": []string{"i-aaa"}},                  // empty content
-		{"content": "echo hi", "instance_ids": []string{}},                  // no instances
-		{"content": "echo hi"},                                              // missing instance_ids
+		{"content": "", "instance_ids": []string{"i-aaa"}},                                               // empty content
+		{"content": "echo hi", "instance_ids": []string{}},                                               // no instances
+		{"content": "echo hi"},                                                                            // missing instance_ids
+		{"content": "echo hi", "instance_ids": []string{"i-aaa"}, "save_to_library": true},               // save_to_library but no name
+		{"content": "echo hi", "instance_ids": []string{"i-aaa"}, "save_to_library": true, "name": "  "}, // save_to_library whitespace name
 	}
 	for _, body := range cases {
 		res, err := client.Post(ts.URL+"/aws/script-runner/execute", "application/json",
