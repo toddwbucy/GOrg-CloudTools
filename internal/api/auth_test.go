@@ -1,6 +1,8 @@
 package api_test
 
 import (
+	"bytes"
+	"mime/multipart"
 	"net/http"
 	"strings"
 	"testing"
@@ -349,6 +351,115 @@ func TestCheckServerCredentials_NoServerCreds(t *testing.T) {
 	envs, _ := body["available_environments"].([]any)
 	if len(envs) != 0 {
 		t.Errorf("available_environments: want empty, got %v", envs)
+	}
+}
+
+// ── Phase 4.2 — FormData alias routes ────────────────────────────────────────
+
+// multipartBody builds a multipart/form-data body from key-value pairs and
+// returns the body and the correct Content-Type (with boundary).
+func multipartBody(t *testing.T, fields map[string]string) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	w := multipart.NewWriter(&buf)
+	for k, v := range fields {
+		if err := w.WriteField(k, v); err != nil {
+			t.Fatalf("WriteField %s: %v", k, err)
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatalf("close multipart writer: %v", err)
+	}
+	return &buf, w.FormDataContentType()
+}
+
+func TestCreateCredentials_FormData_AwsAuthenticate(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":    "AKIAIOSFODNN7EXAMPLE",
+		"secret_key":    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"session_token": "token",
+		"environment":   "com",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate", body)
+	req.Header.Set("Content-Type", ct)
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/authenticate FormData: want 200, got %d", res.StatusCode)
+	}
+	var resp map[string]string
+	decodeJSON(t, res, &resp)
+	if resp["account_id"] != "dev-mode" {
+		t.Errorf("account_id: want dev-mode, got %q", resp["account_id"])
+	}
+}
+
+func TestCreateCredentials_FormData_ScriptRunnerAccounts(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":    "AKIAIOSFODNN7EXAMPLE",
+		"secret_key":    "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+		"session_token": "token",
+		"environment":   "com",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/aws/script-runner/accounts", body)
+	req.Header.Set("Content-Type", ct)
+	res, err := client.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("POST /aws/script-runner/accounts FormData: want 200, got %d", res.StatusCode)
+	}
+}
+
+func TestGetAwsAuthenticate_ReturnsSessionStatus(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	res, err := http.Get(ts.URL + "/aws/authenticate")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	if res.StatusCode != http.StatusOK {
+		t.Errorf("GET /aws/authenticate: want 200, got %d", res.StatusCode)
+	}
+	var body map[string]any
+	decodeJSON(t, res, &body)
+	if _, ok := body["authenticated"]; !ok {
+		t.Error("GET /aws/authenticate: response missing 'authenticated' field")
+	}
+}
+
+func TestCreateCredentials_FormData_MissingFields(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	// Missing secret_key — should be 400.
+	body, ct := multipartBody(t, map[string]string{
+		"access_key":  "AKIAIOSFODNN7EXAMPLE",
+		"environment": "com",
+	})
+	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/aws/authenticate", body)
+	req.Header.Set("Content-Type", ct)
+	res, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("FormData missing secret_key: want 400, got %d", res.StatusCode)
 	}
 }
 

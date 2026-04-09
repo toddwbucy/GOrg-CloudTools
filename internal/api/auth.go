@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -23,12 +24,48 @@ type awsCredentialsRequest struct {
 	Region          string `json:"region,omitempty"`
 }
 
-// handleCreateCredentials validates AWS credentials via STS GetCallerIdentity
-// and stores them in an encrypted session cookie.
-func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request) {
+// decodeCredentialsRequest parses an awsCredentialsRequest from either
+// application/json or multipart/form-data (and application/x-www-form-urlencoded).
+//
+// FormData field names match the auth page HTML:
+//
+//	access_key   → AccessKeyID
+//	secret_key   → SecretAccessKey
+//	session_token → SessionToken
+//	environment  → Environment
+//	region       → Region (optional)
+func decodeCredentialsRequest(r *http.Request) (awsCredentialsRequest, error) {
+	ct := r.Header.Get("Content-Type")
+	if strings.Contains(ct, "multipart/form-data") || strings.Contains(ct, "application/x-www-form-urlencoded") {
+		// 1 MB limit — credentials are tiny; this prevents memory exhaustion.
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			// Fall back to ParseForm for urlencoded bodies.
+			if ferr := r.ParseForm(); ferr != nil {
+				return awsCredentialsRequest{}, fmt.Errorf("failed to parse form: %w", err)
+			}
+		}
+		return awsCredentialsRequest{
+			AccessKeyID:     strings.TrimSpace(r.FormValue("access_key")),
+			SecretAccessKey: strings.TrimSpace(r.FormValue("secret_key")),
+			SessionToken:    strings.TrimSpace(r.FormValue("session_token")),
+			Environment:     strings.TrimSpace(r.FormValue("environment")),
+			Region:          strings.TrimSpace(r.FormValue("region")),
+		}, nil
+	}
 	var req awsCredentialsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		jsonError(w, "invalid request body", http.StatusBadRequest)
+		return awsCredentialsRequest{}, fmt.Errorf("invalid JSON: %w", err)
+	}
+	return req, nil
+}
+
+// handleCreateCredentials validates AWS credentials via STS GetCallerIdentity
+// and stores them in an encrypted session cookie.
+// Accepts both application/json and multipart/form-data.
+func (s *Server) handleCreateCredentials(w http.ResponseWriter, r *http.Request) {
+	req, err := decodeCredentialsRequest(r)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.AccessKeyID == "" || req.SecretAccessKey == "" {
