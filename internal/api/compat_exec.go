@@ -622,4 +622,13 @@ func (s *Server) registerScriptRunnerCompatRoutes(execRL, readRL rateLimiterWrap
 		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleScriptLibrary))))
 	s.mux.Handle("GET /aws/script-runner/library/{id}",
 		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleScriptLibraryGet))))
+	// upload-csv is a legacy alias for upload-change-csv (registered via
+	// registerChangeManagementRoutes). Both accept multipart/form-data with a
+	// "file" field and create/replace a Change + its ChangeInstances.
+	s.mux.Handle("POST /aws/script-runner/upload-csv",
+		readRL.Wrap(http.HandlerFunc(s.handleUploadChangeCSV)))
+	// save-manual-change accepts a JSON body with change_number + instance_ids
+	// (pasted from a textarea) and creates a Change without CSV parsing.
+	s.mux.Handle("POST /aws/script-runner/save-manual-change",
+		readRL.Wrap(http.HandlerFunc(s.handleSaveManualChange)))
 }

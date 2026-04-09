@@ -138,6 +138,9 @@ func (s *Server) registerRoutes() {
 	// ── Script runner compat ──────────────────────────────────────────────────
 	s.registerScriptRunnerCompatRoutes(execRL, readRL)
 
+	// ── Tool-specific compat (linux-qc, sft-fixer, disk-recon, rhsa, decom) ──
+	s.registerToolCompatRoutes(execRL, readRL)
+
 	// ── Change management aliases (per-tool namespace) ─────────────────────────
 	// Each tool that embeds change-management.js sets toolEndpoint to its prefix
 	// and calls load-change, list-changes, save-change-with-instances, etc.
