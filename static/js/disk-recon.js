@@ -63,7 +63,7 @@ async function runDiskRecon() {
 
     try {
         const headers = window.Utils
-            ? window.Utils.buildCsrfHeaders({ 'Content-Type': 'application/json' })
+            ? { 'Content-Type': 'application/json', ...window.Utils.buildCsrfHeaders() }
             : { 'Content-Type': 'application/json' };
 
         const resp = await fetch('/aws/disk-recon/run', {
