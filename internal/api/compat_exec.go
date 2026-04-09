@@ -605,7 +605,7 @@ func (s *Server) requireAWSSession(next http.Handler) http.Handler {
 
 // registerScriptRunnerCompatRoutes wires the script-runner frontend compat
 // endpoints. Called from registerRoutes().
-func (s *Server) registerScriptRunnerCompatRoutes(execRL, readRL rateLimiterWrapper) {
+func (s *Server) registerScriptRunnerCompatRoutes(execRL, readRL, writeRL rateLimiterWrapper) {
 	s.mux.Handle("POST /aws/script-runner/test-connectivity",
 		execRL.Wrap(http.HandlerFunc(s.handleTestConnectivity)))
 	// validate-script is pure static analysis — no credentials required.
@@ -626,9 +626,9 @@ func (s *Server) registerScriptRunnerCompatRoutes(execRL, readRL rateLimiterWrap
 	// registerChangeManagementRoutes). Both accept multipart/form-data with a
 	// "file" field and create/replace a Change + its ChangeInstances.
 	s.mux.Handle("POST /aws/script-runner/upload-csv",
-		readRL.Wrap(http.HandlerFunc(s.handleUploadChangeCSV)))
+		writeRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleUploadChangeCSV))))
 	// save-manual-change accepts a JSON body with change_number + instance_ids
 	// (pasted from a textarea) and creates a Change without CSV parsing.
 	s.mux.Handle("POST /aws/script-runner/save-manual-change",
-		readRL.Wrap(http.HandlerFunc(s.handleSaveManualChange)))
+		writeRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleSaveManualChange))))
 }

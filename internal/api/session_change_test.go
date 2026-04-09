@@ -555,12 +555,29 @@ func TestUploadChangeCSV_Success(t *testing.T) {
 
 // ── upload-csv (legacy alias) ─────────────────────────────────────────────────
 
-// TestUploadCSVAlias verifies that /upload-csv and /upload-change-csv both
+func TestUploadCSVAlias_NoAuth(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	csvContent := "change_number,platform,region,account_id,instance_id\nCHG-ALIAS,linux,us-east-1,111111111111,i-alias1\n"
+	body, ct := multipartCSV(t, csvContent)
+	res, err := http.Post(ts.URL+"/aws/script-runner/upload-csv", ct, body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", res.StatusCode)
+	}
+}
+
+// TestUploadCSVAlias_Success verifies that /upload-csv and /upload-change-csv both
 // accept the same CSV and produce equivalent results.
 func TestUploadCSVAlias_Success(t *testing.T) {
 	db := newTestDB(t)
 	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	csvContent := strings.Join([]string{
 		"change_number,platform,region,account_id,instance_id",
@@ -584,10 +601,32 @@ func TestUploadCSVAlias_Success(t *testing.T) {
 
 // ── save-manual-change ────────────────────────────────────────────────────────
 
-func TestSaveManualChange_MissingChangeNumber(t *testing.T) {
+func TestSaveManualChange_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
+
+	res, err := http.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MAN",
+			"instance_ids":  []string{"i-aaa"},
+			"account_id":    "123456789012",
+			"region":        "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_MissingChangeNumber(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",
@@ -607,8 +646,9 @@ func TestSaveManualChange_MissingChangeNumber(t *testing.T) {
 
 func TestSaveManualChange_MissingInstanceIDs(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",
@@ -629,8 +669,9 @@ func TestSaveManualChange_MissingInstanceIDs(t *testing.T) {
 
 func TestSaveManualChange_MissingAccountID(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",
@@ -650,8 +691,9 @@ func TestSaveManualChange_MissingAccountID(t *testing.T) {
 
 func TestSaveManualChange_MissingRegion(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",
@@ -673,6 +715,7 @@ func TestSaveManualChange_Success(t *testing.T) {
 	db := newTestDB(t)
 	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",
@@ -732,6 +775,7 @@ func TestSaveManualChange_DefaultPlatform(t *testing.T) {
 	db := newTestDB(t)
 	ts := newDevModeTestServer(t, db)
 	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
 		"application/json",

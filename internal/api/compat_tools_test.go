@@ -189,12 +189,30 @@ func TestQCLatestStep1Results_NoChange(t *testing.T) {
 	}
 }
 
-func TestQCDownload_Stub(t *testing.T) {
+func TestQCDownload_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
 	for _, path := range []string{"/aws/linux-qc-prep/download-reports", "/aws/linux-qc-prep/download-final-report"} {
 		res, err := http.Get(ts.URL + path)
+		if err != nil {
+			t.Fatalf("GET %s: %v", path, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s: expected 401, got %d", path, res.StatusCode)
+		}
+	}
+}
+
+func TestQCDownload_Stub(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	for _, path := range []string{"/aws/linux-qc-prep/download-reports", "/aws/linux-qc-prep/download-final-report"} {
+		res, err := client.Get(ts.URL + path)
 		if err != nil {
 			t.Fatalf("GET %s: %v", path, err)
 		}
@@ -792,14 +810,6 @@ func TestDecomSurvey_Stubs(t *testing.T) {
 }
 
 // ── Output parser unit tests ──────────────────────────────────────────────────
-
-func TestParseQCOutput_Empty(t *testing.T) {
-	db := newTestDB(t)
-	_ = db
-	// Just call the parsing logic — import it via package-internal exposure isn't
-	// possible in _test package, so we exercise it through the HTTP layer above.
-	// This test guards that the parser package compiles.
-}
 
 func TestParseComplianceOutput_ValidJSON(t *testing.T) {
 	// The compliance parser is exercised by TestRHSAResults_Shape. This test

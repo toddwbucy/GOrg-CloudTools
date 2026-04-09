@@ -421,6 +421,9 @@ func sftScript(scriptType string) (script, platform string, err error) {
 // ansiRE strips ANSI escape sequences from terminal output before parsing.
 var ansiRE = regexp.MustCompile(`\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
 
+// awsAccountIDRE matches a valid AWS account ID: exactly 12 decimal digits.
+var awsAccountIDRE = regexp.MustCompile(`^[0-9]{12}$`)
+
 func stripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
 
 // qcInfo holds fields extracted from a LinuxPatcher QC report.
@@ -767,11 +770,7 @@ func (s *Server) handleQCStep(w http.ResponseWriter, r *http.Request) {
 
 	instanceIDs, accountID, region, err := resolveChangeInstances(ch, nil)
 	if err != nil {
-		if errors.Is(err, errCrossRegion) {
-			jsonError(w, err.Error(), http.StatusBadRequest)
-		} else {
-			jsonError(w, err.Error(), http.StatusBadRequest)
-		}
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -847,10 +846,19 @@ func (s *Server) handleQCResults(w http.ResponseWriter, r *http.Request) {
 						"selected_kernel":   nil,
 					}
 				}
-				// Merge available_kernels.
+				// Merge available_kernels (defensive: handle both []string and []interface{}).
 				kset := make(map[string]bool)
-				for _, k := range existing["available_kernels"].([]string) {
-					kset[k] = true
+				switch v := existing["available_kernels"].(type) {
+				case []string:
+					for _, k := range v {
+						kset[k] = true
+					}
+				case []any:
+					for _, k := range v {
+						if s, ok := k.(string); ok {
+							kset[s] = true
+						}
+					}
 				}
 				for _, k := range info.AvailableKernels {
 					kset[k] = true
@@ -861,7 +869,7 @@ func (s *Server) handleQCResults(w http.ResponseWriter, r *http.Request) {
 				}
 				existing["available_kernels"] = merged
 
-				instances := existing["instances"].([]any)
+				instances, _ := existing["instances"].([]any)
 				instances = append(instances, map[string]any{
 					"instance_id":        ex.InstanceID,
 					"account_id":         ex.AccountID,
@@ -1021,11 +1029,7 @@ func (s *Server) handleLinuxQCPostExec(w http.ResponseWriter, r *http.Request) {
 
 	instanceIDs, accountID, region, err := resolveChangeInstances(ch, req.InstanceIDs)
 	if err != nil {
-		if errors.Is(err, errCrossRegion) {
-			jsonError(w, err.Error(), http.StatusBadRequest)
-		} else {
-			jsonError(w, err.Error(), http.StatusBadRequest)
-		}
+		jsonError(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -1300,7 +1304,7 @@ func (s *Server) handleDiskReconRun(w http.ResponseWriter, r *http.Request) {
 
 	// Validate fields.
 	var errs []string
-	if req.AccountID == "" || len(req.AccountID) != 12 {
+	if !awsAccountIDRE.MatchString(req.AccountID) {
 		errs = append(errs, "account_id must be a 12-digit number")
 	}
 	if req.Region == "" {
@@ -1690,8 +1694,10 @@ func (s *Server) registerToolCompatRoutes(execRL, readRL rateLimiterWrapper) {
 	s.mux.Handle("GET /aws/linux-qc-prep/latest-step1-results",
 		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleQCLatestStep1Results))))
 	// Download endpoints: stub (501) — LinuxPatcher report rendering not ported.
-	s.mux.HandleFunc("GET /aws/linux-qc-prep/download-reports", handleQCDownload)
-	s.mux.HandleFunc("GET /aws/linux-qc-prep/download-final-report", handleQCDownload)
+	s.mux.Handle("GET /aws/linux-qc-prep/download-reports",
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(handleQCDownload))))
+	s.mux.Handle("GET /aws/linux-qc-prep/download-final-report",
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(handleQCDownload))))
 
 	// ── Linux QC Post ────────────────────────────────────────────────────────
 	s.mux.Handle("POST /aws/linux-qc-post/test-connectivity",
