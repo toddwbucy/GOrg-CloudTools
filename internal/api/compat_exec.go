@@ -54,7 +54,11 @@ func (s *Server) handleTestConnectivity(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	online := ssmOnlineSet(r.Context(), cfg, req.InstanceIDs)
+	online, err := ssmOnlineSet(r.Context(), cfg, req.InstanceIDs)
+	if err != nil {
+		jsonError(w, "connectivity check failed: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	results := make([]connectivityResult, 0, len(req.InstanceIDs))
 	for _, id := range req.InstanceIDs {
@@ -69,9 +73,9 @@ func (s *Server) handleTestConnectivity(w http.ResponseWriter, r *http.Request) 
 }
 
 // ssmOnlineSet calls SSM DescribeInstanceInformation (paginated) and returns
-// the set of instance IDs whose agent is currently online.
-// On error the function returns an empty set (caller treats all as unreachable).
-func ssmOnlineSet(ctx context.Context, cfg aws.Config, ids []string) map[string]bool {
+// the set of instance IDs whose agent reports PingStatus Online.
+// Any paginator error is returned so the caller can surface it as a 5xx.
+func ssmOnlineSet(ctx context.Context, cfg aws.Config, ids []string) (map[string]bool, error) {
 	client := awsssm.NewFromConfig(cfg)
 	online := make(map[string]bool, len(ids))
 
@@ -85,15 +89,15 @@ func ssmOnlineSet(ctx context.Context, cfg aws.Config, ids []string) map[string]
 	for paginator.HasMorePages() {
 		page, err := paginator.NextPage(ctx)
 		if err != nil {
-			break
+			return nil, err
 		}
 		for _, info := range page.InstanceInformationList {
-			if info.InstanceId != nil {
+			if info.InstanceId != nil && info.PingStatus == ssmtypes.PingStatusOnline {
 				online[*info.InstanceId] = true
 			}
 		}
 	}
-	return online
+	return online, nil
 }
 
 // ── validate-script ───────────────────────────────────────────────────────────
@@ -181,9 +185,15 @@ func (s *Server) handleScriptRunnerExec(w http.ResponseWriter, r *http.Request) 
 	if interpreter == "" {
 		interpreter = "bash"
 	}
-	platform := "linux"
-	if interpreter == "powershell" {
+	var platform string
+	switch interpreter {
+	case "bash":
+		platform = "linux"
+	case "powershell":
 		platform = "windows"
+	default:
+		jsonError(w, fmt.Sprintf("unsupported interpreter %q: must be bash or powershell", interpreter), http.StatusBadRequest)
+		return
 	}
 
 	sess := middleware.GetSession(r)
@@ -488,6 +498,20 @@ func (s *Server) handleScriptLibraryGet(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// requireAWSSession is a middleware that gates a handler behind a session check:
+// the request must carry an encrypted session cookie with AWS credentials.
+// Returns 401 for anonymous or credentialless requests.
+func (s *Server) requireAWSSession(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess := middleware.GetSession(r)
+		if sess.AWSAccessKeyID == "" || sess.AWSSecretAccessKey == "" {
+			jsonError(w, "no valid AWS credentials in session", http.StatusUnauthorized)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ── route registration ────────────────────────────────────────────────────────
 
 // registerScriptRunnerCompatRoutes wires the script-runner frontend compat
@@ -495,16 +519,18 @@ func (s *Server) handleScriptLibraryGet(w http.ResponseWriter, r *http.Request) 
 func (s *Server) registerScriptRunnerCompatRoutes(execRL, readRL rateLimiterWrapper) {
 	s.mux.Handle("POST /aws/script-runner/test-connectivity",
 		execRL.Wrap(http.HandlerFunc(s.handleTestConnectivity)))
+	// validate-script is pure static analysis — no credentials required.
 	s.mux.Handle("POST /aws/script-runner/validate-script",
 		readRL.Wrap(http.HandlerFunc(s.handleValidateScript)))
 	s.mux.Handle("POST /aws/script-runner/execute",
 		execRL.Wrap(http.HandlerFunc(s.handleScriptRunnerExec)))
+	// Results and library endpoints are gated: callers must have an active session.
 	s.mux.Handle("GET /aws/script-runner/results/{batch_id}",
-		readRL.Wrap(http.HandlerFunc(s.handleScriptRunnerResults)))
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleScriptRunnerResults))))
 	s.mux.Handle("GET /aws/script-runner/download-results/{batch_id}",
-		readRL.Wrap(http.HandlerFunc(s.handleDownloadResults)))
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleDownloadResults))))
 	s.mux.Handle("GET /aws/script-runner/library",
-		readRL.Wrap(http.HandlerFunc(s.handleScriptLibrary)))
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleScriptLibrary))))
 	s.mux.Handle("GET /aws/script-runner/library/{id}",
-		readRL.Wrap(http.HandlerFunc(s.handleScriptLibraryGet)))
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleScriptLibraryGet))))
 }

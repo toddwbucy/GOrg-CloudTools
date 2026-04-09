@@ -137,11 +137,27 @@ func TestScriptRunnerExec_MissingFields(t *testing.T) {
 
 // ── results ───────────────────────────────────────────────────────────────────
 
-func TestScriptRunnerResults_NotFound(t *testing.T) {
+func TestScriptRunnerResults_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/aws/script-runner/results/99999")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without credentials, got %d", res.StatusCode)
+	}
+}
+
+func TestScriptRunnerResults_NotFound(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Get(ts.URL + "/aws/script-runner/results/99999")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -153,7 +169,9 @@ func TestScriptRunnerResults_NotFound(t *testing.T) {
 
 func TestScriptRunnerResults_Shape(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	// Seed a batch with two executions.
 	script := models.Script{Name: "test", Content: "echo hi", ScriptType: "bash", Interpreter: "bash"}
@@ -187,7 +205,7 @@ func TestScriptRunnerResults_Shape(t *testing.T) {
 		}
 	}
 
-	res, err := http.Get(fmt.Sprintf("%s/aws/script-runner/results/%d", ts.URL, batch.ID))
+	res, err := client.Get(fmt.Sprintf("%s/aws/script-runner/results/%d", ts.URL, batch.ID))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -234,11 +252,27 @@ func TestScriptRunnerResults_Shape(t *testing.T) {
 
 // ── download-results ──────────────────────────────────────────────────────────
 
-func TestDownloadResults_NotFound(t *testing.T) {
+func TestDownloadResults_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/aws/script-runner/download-results/99999?format=csv")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without credentials, got %d", res.StatusCode)
+	}
+}
+
+func TestDownloadResults_NotFound(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Get(ts.URL + "/aws/script-runner/download-results/99999?format=csv")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -250,7 +284,9 @@ func TestDownloadResults_NotFound(t *testing.T) {
 
 func TestDownloadResults_Formats(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	script := models.Script{Name: "dl", Content: "echo dl", ScriptType: "bash", Interpreter: "bash"}
 	if err := db.Create(&script).Error; err != nil {
@@ -274,7 +310,7 @@ func TestDownloadResults_Formats(t *testing.T) {
 
 	for _, format := range []string{"csv", "json", "text"} {
 		url := fmt.Sprintf("%s/aws/script-runner/download-results/%d?format=%s", ts.URL, batch.ID, format)
-		res, err := http.Get(url)
+		res, err := client.Get(url)
 		if err != nil {
 			t.Fatalf("%s: GET: %v", format, err)
 		}
@@ -293,11 +329,27 @@ func TestDownloadResults_Formats(t *testing.T) {
 
 // ── library ───────────────────────────────────────────────────────────────────
 
-func TestScriptLibrary_Empty(t *testing.T) {
+func TestScriptLibrary_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/aws/script-runner/library")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without credentials, got %d", res.StatusCode)
+	}
+}
+
+func TestScriptLibrary_Empty(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Get(ts.URL + "/aws/script-runner/library")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -317,7 +369,9 @@ func TestScriptLibrary_Empty(t *testing.T) {
 
 func TestScriptLibrary_ExcludesEphemeral(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	visible := models.Script{Name: "visible", Content: "echo v", ScriptType: "bash", Interpreter: "bash", Ephemeral: false}
 	hidden := models.Script{Name: "hidden", Content: "echo h", ScriptType: "bash", Interpreter: "bash", Ephemeral: true}
@@ -327,13 +381,19 @@ func TestScriptLibrary_ExcludesEphemeral(t *testing.T) {
 		}
 	}
 
-	res, err := http.Get(ts.URL + "/aws/script-runner/library")
+	res, err := client.Get(ts.URL + "/aws/script-runner/library")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
 	var got map[string]any
 	decodeJSON(t, res, &got)
-	scripts := got["scripts"].([]any)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
+	scripts, ok := got["scripts"].([]any)
+	if !ok {
+		t.Fatalf("scripts field wrong type: %T", got["scripts"])
+	}
 	if len(scripts) != 1 {
 		t.Fatalf("expected 1 script, got %d", len(scripts))
 	}
@@ -343,11 +403,27 @@ func TestScriptLibrary_ExcludesEphemeral(t *testing.T) {
 	}
 }
 
-func TestScriptLibraryGet_NotFound(t *testing.T) {
+func TestScriptLibraryGet_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
 
 	res, err := http.Get(ts.URL + "/aws/script-runner/library/99999")
+	if err != nil {
+		t.Fatalf("GET: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401 without credentials, got %d", res.StatusCode)
+	}
+}
+
+func TestScriptLibraryGet_NotFound(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Get(ts.URL + "/aws/script-runner/library/99999")
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
@@ -359,7 +435,9 @@ func TestScriptLibraryGet_NotFound(t *testing.T) {
 
 func TestScriptLibraryGet_Success(t *testing.T) {
 	db := newTestDB(t)
-	ts := newTestServer(t, db)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
 
 	script := models.Script{
 		Name:        "my-script",
@@ -372,7 +450,7 @@ func TestScriptLibraryGet_Success(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 
-	res, err := http.Get(fmt.Sprintf("%s/aws/script-runner/library/%d", ts.URL, script.ID))
+	res, err := client.Get(fmt.Sprintf("%s/aws/script-runner/library/%d", ts.URL, script.ID))
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
