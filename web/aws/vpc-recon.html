@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS VPC Recon</title>
+    <link rel="stylesheet" href="/static/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/css/custom-theme.css">
+    <link rel="stylesheet" href="/static/css/styles.css">
+</head>
+<body>
+    <!-- Integrated Brand Header -->
+    <header class="main-header">
+        <div class="container">
+            <div class="brand-section text-center">
+                <h1 class="main-brand">
+                    <span style="color: var(--brand-primary);">CloudOpsTools</span>
+                </h1>
+                <div class="client-badge">
+                    <i class="bi bi-building"></i> Multi-Cloud Operations Platform
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Enhanced Navigation -->
+    <nav class="navbar navbar-expand-lg sticky-top">
+        <div class="container">
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link " href="/">
+                            <i class="bi bi-house-fill me-2"></i>Dashboard
+                        </a>
+                    </li>
+
+                    <!-- AWS Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle" type="button" id="awsDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-cloud me-2"></i>AWS Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="awsDropdown">
+                            <li><a class="dropdown-item" href="/aws/linux-qc-prep">
+                                <i class="bi bi-linux me-2"></i>Linux QC Patching Prep
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/linux-qc-post">
+                                <i class="bi bi-check-circle me-2"></i>Linux QC Patching Post
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/sft-fixer">
+                                <i class="bi bi-wrench me-2"></i>SFT Fixer
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/script-runner">
+                                <i class="bi bi-terminal me-2"></i>Script Runner
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/vpc-recon">
+                                <i class="bi bi-diagram-3 me-2"></i>VPC Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/disk-recon">
+                                <i class="bi bi-hdd me-2"></i>Disk Recon
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/rhsa-compliance">
+                                <i class="bi bi-patch-check me-2"></i>RHSA Compliance
+                            </a></li>
+                            <li><a class="dropdown-item" href="/aws/decom-survey">
+                                <i class="bi bi-trash3 me-2"></i>Decom Survey
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="/aws/tools">
+                                <i class="bi bi-grid-3x3-gap me-2"></i>All AWS Tools
+                            </a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: Azure Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="azureDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-microsoft me-2"></i>Azure Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="azureDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: GCP Tools -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="gcpDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-google me-2"></i>GCP Tools
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="gcpDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+
+                    <!-- Future: ServiceNow Integration -->
+                    <li class="nav-item dropdown">
+                        <button class="btn btn-link nav-link dropdown-toggle disabled" type="button" id="servicenowDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-gear me-2"></i>ServiceNow
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="servicenowDropdown">
+                            <li><a class="dropdown-item disabled" href="#">Coming Soon</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <button class="btn btn-link nav-link theme-switcher"
+                                id="theme-toggle"
+                                role="switch"
+                                aria-checked="true"
+                                aria-label="Toggle theme, currently Dark Mode"
+                                title="Toggle theme">
+                            <i class="bi bi-moon-stars-fill" id="theme-icon" aria-hidden="true"></i>
+                            <span class="theme-text">Light Mode</span>
+                        </button>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="#">
+                            <i class="bi bi-person-circle me-2"></i>Profile
+                        </a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container mt-4 mb-4">
+        <!-- Flash messages -->
+
+        <!-- Main content -->
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-12">
+            <h1 class="mb-4">
+                <i class="bi bi-diagram-3-fill me-2"></i>VPC Reconnaissance
+            </h1>
+
+            <!-- Credentials Section -->
+            <div class="card mb-3">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0"><i class="bi bi-key-fill me-2"></i>AWS Credentials</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-shield-lock me-2"></i>Set GOV Credentials
+                            </a>
+                            <span id="gov-creds-status" class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="/aws" class="btn btn-primary">
+                                <i class="bi bi-cloud me-2"></i>Set COM Credentials
+                            </a>
+                            <span id="com-creds-status" class="ms-2 badge bg-secondary">
+Not Set                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scan Input -->
+            <div class="card mb-3">
+                <div class="card-header bg-info text-white">
+                    <h5 class="mb-0"><i class="bi bi-search me-2"></i>VPC Scan Parameters</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3">
+                        <!-- Environment -->
+                        <div class="col-md-2">
+                            <label for="environment" class="form-label fw-bold">
+                                Environment <span class="text-danger">*</span>
+                            </label>
+                            <select id="environment" class="form-select" onchange="onEnvironmentChange()">
+                                <option value="com">COM (Commercial)</option>
+                                <option value="gov">GOV (GovCloud)</option>
+                            </select>
+                        </div>
+
+                        <!-- Region -->
+                        <div class="col-md-3">
+                            <label for="region" class="form-label fw-bold">
+                                Region <span class="text-danger">*</span>
+                            </label>
+                            <select id="region" class="form-select">
+                            </select>
+                        </div>
+
+                        <!-- Account ID -->
+                        <div class="col-md-3">
+                            <label for="account-id" class="form-label fw-bold">
+                                Account ID <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="account-id" class="form-control font-monospace"
+                                   placeholder="123456789012" maxlength="12" pattern="\d{12}">
+                            <small class="form-text text-muted">12-digit AWS account number</small>
+                        </div>
+
+                        <!-- VPC ID -->
+                        <div class="col-md-4">
+                            <label for="vpc-id" class="form-label fw-bold">
+                                VPC ID <span class="text-danger">*</span>
+                            </label>
+                            <input type="text" id="vpc-id" class="form-control font-monospace"
+                                   placeholder="vpc-0abc123def456789a">
+                            <small class="form-text text-muted">Starts with vpc-</small>
+                        </div>
+                    </div>
+
+                    <div class="row mt-3">
+                        <div class="col-md-12 d-flex align-items-center gap-3">
+                            <button class="btn btn-info btn-lg" id="scan-btn" onclick="runScan()">
+                                <i class="bi bi-radar me-2"></i>Run VPC Recon
+                            </button>
+                            <div id="scan-progress" style="display: none;">
+                                <div class="spinner-border spinner-border-sm text-info me-2" role="status"></div>
+                                <span class="text-muted" id="scan-progress-text">Scanning VPC…</span>
+                            </div>
+                            <div id="scan-error" class="alert alert-danger mb-0 py-2 px-3" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results -->
+            <div id="results-section" style="display: none;">
+
+                <!-- Summary Cards -->
+                <div class="row g-3 mb-3" id="summary-cards"></div>
+
+                <!-- Report Output -->
+                <div class="card">
+                    <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0"><i class="bi bi-file-text me-2"></i>Recon Report</h5>
+                        <button class="btn btn-success btn-sm" id="download-btn" onclick="downloadReport()">
+                            <i class="bi bi-download me-2"></i>Download Markdown
+                        </button>
+                    </div>
+                    <div class="card-body p-0">
+                        <!-- Collapsible raw markdown -->
+                        <div class="p-3 border-bottom">
+                            <button class="btn btn-sm btn-outline-secondary" type="button"
+                                    data-bs-toggle="collapse" data-bs-target="#markdown-preview">
+                                <i class="bi bi-code me-1"></i>Toggle Markdown Preview
+                            </button>
+                        </div>
+                        <div class="collapse show" id="markdown-preview">
+                            <pre id="report-content"
+                                 class="m-0 p-3"
+                                 style="max-height: 600px; overflow-y: auto; font-size: 0.8rem; white-space: pre-wrap; word-break: break-word; background: var(--bs-dark); color: var(--bs-light);"></pre>
+                        </div>
+                    </div>
+                </div>
+
+            </div><!-- /results-section -->
+
+        </div>
+    </div>
+</div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8">
+                    <h5>CloudOpsTools</h5>
+                    <p class="mb-2">Empowering digital transformation through expert cloud solutions</p>
+                    <small style="color: rgba(255,255,255,0.8);">Multi-Cloud Operations Platform</small>
+                </div>
+                <div class="col-md-4">
+                    <div class="d-flex align-items-center justify-content-end gap-3">
+                        <span style="color: var(--brand-primary); font-weight: bold;">CloudOpsTools</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="/static/js/jquery-3.6.0.min.js"></script>
+    <script src="/static/js/bootstrap.bundle.min.js"></script>
+    <script src="/static/js/theme-switcher.js"></script>
+    <script src="/static/js/utils.js"></script>
+    <script src="/static/js/main.js"></script>
+
+    <!-- Toast notification utility -->
+    <div class="toast-container position-fixed top-0 end-0 p-3" style="z-index: 11">
+        <div id="liveToast" class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+            <div class="toast-header">
+                <strong class="me-auto">Notification</strong>
+                <button type="button" class="btn-close" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+            <div class="toast-body"></div>
+        </div>
+    </div>
+
+    <script>
+    function showToast(message, type = 'info') {
+        const toast = document.getElementById('liveToast');
+        const toastBody = toast.querySelector('.toast-body');
+        const toastHeader = toast.querySelector('.toast-header');
+
+        // Set message
+        toastBody.textContent = message;
+
+        // Set type styling
+        toast.className = 'toast';
+        if (type === 'success') {
+            toast.classList.add('bg-success', 'text-white');
+            toastHeader.classList.add('bg-success', 'text-white');
+        } else if (type === 'danger' || type === 'error') {
+            toast.classList.add('bg-danger', 'text-white');
+            toastHeader.classList.add('bg-danger', 'text-white');
+        } else if (type === 'warning') {
+            toast.classList.add('bg-warning');
+            toastHeader.classList.add('bg-warning');
+        } else {
+            toast.classList.add('bg-info', 'text-white');
+            toastHeader.classList.add('bg-info', 'text-white');
+        }
+
+        // Show toast
+        const bsToast = new bootstrap.Toast(toast);
+        bsToast.show();
+    }
+    </script>
+
+<script src="/static/js/vpc-recon.js"></script>
+
+    
+</body>
+</html>

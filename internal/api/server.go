@@ -129,4 +129,28 @@ func (s *Server) registerRoutes() {
 	// STATIC_DIR is configurable so the server works correctly in containers and
 	// systemd units where the working directory may differ from the binary location.
 	s.mux.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(s.cfg.StaticDir))))
+
+	// ── HTML page routes ──────────────────────────────────────────────────────
+	// Each route serves the pre-rendered static HTML file from WEB_DIR.
+	// JS on the page fetches all dynamic state from the JSON API after load.
+	s.mux.HandleFunc("GET /{$}", s.serveHTML("index.html"))
+	s.mux.HandleFunc("GET /aws/auth", s.serveHTML("aws/auth.html"))
+	s.mux.HandleFunc("GET /aws/tools", s.serveHTML("aws/tools.html"))
+	s.mux.HandleFunc("GET /aws/script-runner", s.serveHTML("aws/script-runner.html"))
+	s.mux.HandleFunc("GET /aws/linux-qc-prep", s.serveHTML("aws/linux-qc-prep.html"))
+	s.mux.HandleFunc("GET /aws/linux-qc-post", s.serveHTML("aws/linux-qc-post.html"))
+	s.mux.HandleFunc("GET /aws/sft-fixer", s.serveHTML("aws/sft-fixer.html"))
+	s.mux.HandleFunc("GET /aws/vpc-recon", s.serveHTML("aws/vpc-recon.html"))
+	s.mux.HandleFunc("GET /aws/disk-recon", s.serveHTML("aws/disk-recon.html"))
+	s.mux.HandleFunc("GET /aws/rhsa-compliance", s.serveHTML("aws/rhsa-compliance.html"))
+	s.mux.HandleFunc("GET /aws/decom-survey", s.serveHTML("aws/decom-survey.html"))
+}
+
+// serveHTML returns a handler that serves a single pre-rendered HTML file from
+// WEB_DIR. Using http.ServeFile (not ServeContent) so the browser gets
+// correct Last-Modified and Content-Type headers.
+func (s *Server) serveHTML(name string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFile(w, r, s.cfg.WebDir+"/"+name)
+	}
 }
