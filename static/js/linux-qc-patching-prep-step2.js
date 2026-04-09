@@ -276,13 +276,18 @@ async function executeStep2AllGroups() {
     } catch (error) {
         console.error('Error executing Step 2:', error);
         showToast('Failed to execute Step 2: ' + error.message, 'danger');
-    } finally {
-        // Re-enable the button
+        // Re-enable on kickoff failure so the user can retry.
         if (btn) {
             btn.disabled = false;
-            btn.innerHTML = '<i class="bi bi-gear-wide-connected me-2"></i>Stage All Groups';
+            btn.textContent = '';
+            const icon = document.createElement('i');
+            icon.className = 'bi bi-gear-wide-connected me-2';
+            btn.appendChild(icon);
+            btn.appendChild(document.createTextNode('Stage All Groups'));
         }
     }
+    // Note: on success the button stays disabled while pollExecutionStatus runs
+    // to prevent duplicate kernel-staging batches against the same hosts.
 }
 
 // Use shared escapeHtml function from utils.js

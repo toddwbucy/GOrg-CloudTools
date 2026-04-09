@@ -273,3 +273,9 @@ function setInputsDisabled(disabled) {
         el.disabled = disabled;
     });
 }
+
+// Expose handlers called from inline HTML attributes to the global scope.
+window.onEnvChange    = onEnvChange;
+window.runDiskRecon   = runDiskRecon;
+window.copyReport     = copyReport;
+window.downloadReport = downloadReport;

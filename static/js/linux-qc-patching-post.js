@@ -379,4 +379,35 @@
 
     // Use shared escapeHtml from utils.js
 
+    // ── Instance selection helpers (called from inline HTML handlers) ──────────
+
+    window.selectAllInstances = function() {
+        document.querySelectorAll('.instance-checkbox').forEach(cb => { cb.checked = true; });
+        const selectAll = document.getElementById('select-all-instances');
+        if (selectAll) selectAll.checked = true;
+    };
+
+    window.deselectAllInstances = function() {
+        document.querySelectorAll('.instance-checkbox').forEach(cb => { cb.checked = false; });
+        const selectAll = document.getElementById('select-all-instances');
+        if (selectAll) selectAll.checked = false;
+    };
+
+    // Select instances whose kernel column contains the user-supplied string.
+    // Each row is expected to have a data-kernel attribute set when the table is populated.
+    window.selectByKernel = function() {
+        const kernel = window.prompt('Enter kernel version to select (partial match):');
+        if (!kernel) return;
+        const term = kernel.trim().toLowerCase();
+        document.querySelectorAll('.instance-checkbox').forEach(cb => {
+            const row = cb.closest('tr');
+            if (!row) return;
+            const kernelCell = row.querySelector('[data-kernel]');
+            const kernelVal  = kernelCell
+                ? (kernelCell.dataset.kernel || '').toLowerCase()
+                : row.textContent.toLowerCase();
+            cb.checked = kernelVal.includes(term);
+        });
+    };
+
 })();

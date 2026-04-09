@@ -107,19 +107,35 @@ window.updateManualInstancesPreview = function() {
     }
     
     preview.style.display = 'block';
-    list.innerHTML = ScriptRunnerState.manualInstances.map((inst, idx) => `
-        <div class="mb-2 p-2 bg-light rounded">
-            <div class="d-flex justify-content-between align-items-center">
-                <div>
-                    <strong>${inst.instance_id}</strong><br>
-                    <small class="text-muted">${inst.account_id} | ${inst.region} | ${inst.platform}</small>
-                </div>
-                <button type="button" class="btn btn-sm btn-danger" onclick="removeManualInstance(${idx})">
-                    <i class="bi bi-x"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
+    list.replaceChildren();
+    ScriptRunnerState.manualInstances.forEach((inst, idx) => {
+        const row  = document.createElement('div');
+        row.className = 'mb-2 p-2 bg-light rounded';
+
+        const wrap = document.createElement('div');
+        wrap.className = 'd-flex justify-content-between align-items-center';
+
+        const left   = document.createElement('div');
+        const strong = document.createElement('strong');
+        strong.textContent = inst.instance_id;
+        const br    = document.createElement('br');
+        const small = document.createElement('small');
+        small.className   = 'text-muted';
+        small.textContent = `${inst.account_id} | ${inst.region} | ${inst.platform}`;
+        left.append(strong, br, small);
+
+        const btn  = document.createElement('button');
+        btn.type   = 'button';
+        btn.className = 'btn btn-sm btn-danger';
+        btn.addEventListener('click', () => window.removeManualInstance(idx));
+        const icon = document.createElement('i');
+        icon.className = 'bi bi-x';
+        btn.appendChild(icon);
+
+        wrap.append(left, btn);
+        row.appendChild(wrap);
+        list.appendChild(row);
+    });
 }
 
 // Remove manual instance
