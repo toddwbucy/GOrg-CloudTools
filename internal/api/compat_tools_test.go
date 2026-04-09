@@ -60,6 +60,47 @@ func TestQCStep_Step2MissingKernel(t *testing.T) {
 	}
 }
 
+func TestQCStep_UnsafeKernelVersion(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	// Seed a change with one instance so we get past the "no change" gate.
+	ch := models.Change{ChangeNumber: "CHG-KERN", Status: models.ChangeStatusNew}
+	if err := db.Create(&ch).Error; err != nil {
+		t.Fatalf("seed change: %v", err)
+	}
+	if err := db.Create(&models.ChangeInstance{
+		ChangeID: ch.ID, InstanceID: "i-safe", AccountID: "123456789012",
+		Region: "us-east-1", Platform: "linux",
+	}).Error; err != nil {
+		t.Fatalf("seed instance: %v", err)
+	}
+	// Load the change into session.
+	loadRes, err := client.Post(
+		fmt.Sprintf("%s/aws/linux-qc-prep/load-change/%d", ts.URL, ch.ID),
+		"application/json", nil,
+	)
+	if err != nil {
+		t.Fatalf("load-change: %v", err)
+	}
+	loadRes.Body.Close()
+
+	// kernel_version with shell metacharacters must be rejected.
+	for _, bad := range []string{"5.14; rm -rf /", "$(evil)", "`whoami`", "kernel version"} {
+		res, err := client.Post(ts.URL+"/aws/linux-qc-prep/execute-qc-step", "application/json",
+			jsonBody(t, map[string]any{"step": "step2_kernel_staging", "kernel_version": bad}))
+		if err != nil {
+			t.Fatalf("POST (kernel=%q): %v", bad, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusBadRequest {
+			t.Errorf("kernel_version=%q: expected 400, got %d", bad, res.StatusCode)
+		}
+	}
+}
+
 func TestQCStep_NoChange(t *testing.T) {
 	db := newTestDB(t)
 	ts := newDevModeTestServer(t, db)
@@ -822,15 +863,11 @@ func TestRHSADownload_BadFormat(t *testing.T) {
 
 // ── decom-survey ──────────────────────────────────────────────────────────────
 
-func TestDecomSurvey_Stubs(t *testing.T) {
+func TestDecomSurvey_NoAuth(t *testing.T) {
 	db := newTestDB(t)
 	ts := newTestServer(t, db)
-	client := newTestClient(t)
 
-	paths := []struct {
-		method string
-		path   string
-	}{
+	paths := []struct{ method, path string }{
 		{"POST", "/aws/decom-survey/scan"},
 		{"GET", "/aws/decom-survey/results/1"},
 		{"GET", "/aws/decom-survey/download"},
@@ -838,10 +875,39 @@ func TestDecomSurvey_Stubs(t *testing.T) {
 	for _, p := range paths {
 		var res *http.Response
 		var err error
-		switch p.method {
-		case "POST":
+		if p.method == "POST" {
+			res, err = http.Post(ts.URL+p.path, "application/json", jsonBody(t, map[string]any{}))
+		} else {
+			req, _ := http.NewRequest(p.method, ts.URL+p.path, nil)
+			res, err = http.DefaultClient.Do(req)
+		}
+		if err != nil {
+			t.Fatalf("%s %s: %v", p.method, p.path, err)
+		}
+		res.Body.Close()
+		if res.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s %s: expected 401, got %d", p.method, p.path, res.StatusCode)
+		}
+	}
+}
+
+func TestDecomSurvey_Stubs(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	paths := []struct{ method, path string }{
+		{"POST", "/aws/decom-survey/scan"},
+		{"GET", "/aws/decom-survey/results/1"},
+		{"GET", "/aws/decom-survey/download"},
+	}
+	for _, p := range paths {
+		var res *http.Response
+		var err error
+		if p.method == "POST" {
 			res, err = client.Post(ts.URL+p.path, "application/json", jsonBody(t, map[string]any{}))
-		default:
+		} else {
 			req, _ := http.NewRequest(p.method, ts.URL+p.path, nil)
 			res, err = client.Do(req)
 		}

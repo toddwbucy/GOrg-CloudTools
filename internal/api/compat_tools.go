@@ -357,12 +357,18 @@ const scriptSFTResetWindows = "Write-Host \"=== Windows SFT Reset ===\"\n" +
 
 // injectQCParams replaces {{CHANGE_NUMBER}} and {{KERNEL_VERSION}} in a QC
 // script template with the provided values.
-func injectQCParams(tmpl, changeNumber, kernelVersion string) string {
+// kernelVersion must match kernelVersionRE (alphanumerics, dots, dashes,
+// underscores only) or an error is returned. An empty kernelVersion is allowed
+// for script steps that do not use the placeholder.
+func injectQCParams(tmpl, changeNumber, kernelVersion string) (string, error) {
+	if !kernelVersionRE.MatchString(kernelVersion) {
+		return "", fmt.Errorf("invalid kernel_version %q: only alphanumerics, dots, dashes, and underscores are allowed", kernelVersion)
+	}
 	r := strings.NewReplacer(
 		"{{CHANGE_NUMBER}}", changeNumber,
 		"{{KERNEL_VERSION}}", kernelVersion,
 	)
-	return r.Replace(tmpl)
+	return r.Replace(tmpl), nil
 }
 
 // rhsaScript generates the RHSA advisory check bash script.
@@ -423,6 +429,12 @@ var ansiRE = regexp.MustCompile(`\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])`)
 
 // awsAccountIDRE matches a valid AWS account ID: exactly 12 decimal digits.
 var awsAccountIDRE = regexp.MustCompile(`^[0-9]{12}$`)
+
+// kernelVersionRE matches safe kernel version strings. Only alphanumerics,
+// dots, dashes, and underscores are allowed — sufficient for any real kernel
+// package version string (e.g. 5.14.0-362.8.1.el9_3.x86_64) and prevents
+// shell metacharacter injection into QC script templates.
+var kernelVersionRE = regexp.MustCompile(`^[a-zA-Z0-9.\-_]*$`)
 
 func stripANSI(s string) string { return ansiRE.ReplaceAllString(s, "") }
 
@@ -774,7 +786,11 @@ func (s *Server) handleQCStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	script := injectQCParams(scriptTmpl, ch.ChangeNumber, req.KernelVersion)
+	script, err := injectQCParams(scriptTmpl, ch.ChangeNumber, req.KernelVersion)
+	if err != nil {
+		jsonError(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 
 	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs)
 	if err != nil {
@@ -979,7 +995,8 @@ func (s *Server) handleQCLatestStep1Results(w http.ResponseWriter, r *http.Reque
 				"selected_kernel":   nil,
 			}
 		}
-		existing["instances"] = append(existing["instances"].([]any), map[string]any{
+		instances, _ := existing["instances"].([]any)
+		existing["instances"] = append(instances, map[string]any{
 			"instance_id":    ex.InstanceID,
 			"hostname":       info.Hostname,
 			"current_kernel": info.CurrentKernel,
@@ -1043,7 +1060,13 @@ func (s *Server) handleLinuxQCPostExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	script := injectQCParams(scriptQCPost, ch.ChangeNumber, "")
+	script, err := injectQCParams(scriptQCPost, ch.ChangeNumber, "")
+	if err != nil {
+		// Empty kernelVersion is always valid; this branch should not occur.
+		slog.Error("injectQCParams failed for QC post (empty kernel)", "err", err)
+		jsonError(w, "internal error building script", http.StatusInternalServerError)
+		return
+	}
 
 	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs)
 	if err != nil {
@@ -1753,7 +1776,10 @@ func (s *Server) registerToolCompatRoutes(execRL, readRL rateLimiterWrapper) {
 		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(s.handleRHSADownload))))
 
 	// ── Decom Survey ─────────────────────────────────────────────────────────
-	s.mux.HandleFunc("POST /aws/decom-survey/scan", handleDecomSurvey)
-	s.mux.HandleFunc("GET /aws/decom-survey/results/{batch_id}", handleDecomSurvey)
-	s.mux.HandleFunc("GET /aws/decom-survey/download", handleDecomSurvey)
+	s.mux.Handle("POST /aws/decom-survey/scan",
+		execRL.Wrap(s.requireAWSSession(http.HandlerFunc(handleDecomSurvey))))
+	s.mux.Handle("GET /aws/decom-survey/results/{batch_id}",
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(handleDecomSurvey))))
+	s.mux.Handle("GET /aws/decom-survey/download",
+		readRL.Wrap(s.requireAWSSession(http.HandlerFunc(handleDecomSurvey))))
 }
