@@ -361,6 +361,9 @@ const scriptSFTResetWindows = "Write-Host \"=== Windows SFT Reset ===\"\n" +
 // underscores only) or an error is returned. An empty kernelVersion is allowed
 // for script steps that do not use the placeholder.
 func injectQCParams(tmpl, changeNumber, kernelVersion string) (string, error) {
+	if !kernelVersionRE.MatchString(changeNumber) {
+		return "", fmt.Errorf("invalid change_number %q: only alphanumerics, dots, dashes, and underscores are allowed", changeNumber)
+	}
 	if !kernelVersionRE.MatchString(kernelVersion) {
 		return "", fmt.Errorf("invalid kernel_version %q: only alphanumerics, dots, dashes, and underscores are allowed", kernelVersion)
 	}
@@ -676,10 +679,13 @@ func (s *Server) loadToolBatch(w http.ResponseWriter, batchIDStr, callerKey stri
 // startToolJob is a thin wrapper around runner.Start that builds the
 // exec.ScriptRequest for a tool execution and returns the new batch ID.
 // All validation (credentials, instance resolution) must be done by the caller.
+// execMeta is stored on each Execution record created by the job; pass nil
+// when workflow-specific tagging is not needed.
 func (s *Server) startToolJob(
 	r *http.Request,
 	script, platform, accountID, region, changeNumber, callerKey string,
 	instanceIDs []string,
+	execMeta map[string]any,
 ) (uint, error) {
 	sess := middleware.GetSession(r)
 	cfg, _, err := awscreds.FromSession(r.Context(), sess)
@@ -689,13 +695,14 @@ func (s *Server) startToolJob(
 
 	runner := exec.New(s.db, s.cfg.MaxConcurrentExecutions, s.cfg.ExecutionTimeoutSecs)
 	return runner.Start(r.Context(), cfg, exec.ScriptRequest{
-		InlineScript: script,
-		Platform:     platform,
-		InstanceIDs:  instanceIDs,
-		AccountID:    accountID,
-		Region:       region,
-		ChangeNumber: changeNumber,
-		CallerKey:    callerKey,
+		InlineScript:      script,
+		Platform:          platform,
+		InstanceIDs:       instanceIDs,
+		AccountID:         accountID,
+		Region:            region,
+		ChangeNumber:      changeNumber,
+		CallerKey:         callerKey,
+		ExecutionMetadata: execMeta,
 	})
 }
 
@@ -792,7 +799,8 @@ func (s *Server) handleQCStep(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs)
+	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs,
+		map[string]any{"qc_step": req.Step})
 	if err != nil {
 		slog.Error("QC step runner.Start failed", "step", req.Step, "err", err)
 		jsonError(w, "failed to start execution", http.StatusInternalServerError)
@@ -941,14 +949,16 @@ func (s *Server) handleQCLatestStep1Results(w http.ResponseWriter, r *http.Reque
 	}
 
 	// Find the most recent batch whose executions are tagged with this
-	// change_number AND were run as step1 (identified via execution_metadata).
-	// SQLite's json_extract is the only way to query the serialised map field.
+	// change_number AND were run as step1 (identified via execution_metadata),
+	// scoped to the current caller so cross-user batches are not returned.
 	var batchID uint
 	if err := s.db.Raw(`
-		SELECT batch_id FROM executions
-		WHERE change_number = ?
-		  AND json_extract(execution_metadata, '$.qc_step') = 'step1_initial_qc'
-		ORDER BY created_at DESC LIMIT 1`, ch.ChangeNumber).Scan(&batchID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		SELECT e.batch_id FROM executions e
+		JOIN execution_batches eb ON e.batch_id = eb.id
+		WHERE e.change_number = ?
+		  AND json_extract(e.execution_metadata, '$.qc_step') = 'step1_initial_qc'
+		  AND eb.caller_key = ?
+		ORDER BY e.created_at DESC LIMIT 1`, ch.ChangeNumber, sess.AWSAccessKeyID).Scan(&batchID).Error; err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		slog.Error("latest-step1-results: batch lookup failed", "change_number", ch.ChangeNumber, "err", err)
 		jsonError(w, "database error", http.StatusInternalServerError)
 		return
@@ -965,7 +975,12 @@ func (s *Server) handleQCLatestStep1Results(w http.ResponseWriter, r *http.Reque
 	if err := s.db.Preload("Executions").
 		Where("id = ? AND caller_key = ?", batchID, sess.AWSAccessKeyID).
 		First(&batch).Error; err != nil {
-		jsonOK(w, map[string]any{"status": "no_results", "kernel_groups": map[string]any{}})
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			jsonOK(w, map[string]any{"status": "no_results", "kernel_groups": map[string]any{}})
+		} else {
+			slog.Error("latest-step1-results: batch load failed", "batch_id", batchID, "err", err)
+			jsonError(w, "database error", http.StatusInternalServerError)
+		}
 		return
 	}
 
@@ -1048,6 +1063,8 @@ func (s *Server) handleLinuxQCPostExec(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if sess.CurrentChangeID == 0 {
 			jsonError(w, "no change loaded in session", http.StatusBadRequest)
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			jsonError(w, "change not found", http.StatusNotFound)
 		} else {
 			jsonError(w, "database error", http.StatusInternalServerError)
 		}
@@ -1068,7 +1085,7 @@ func (s *Server) handleLinuxQCPostExec(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs)
+	batchID, err := s.startToolJob(r, script, "linux", accountID, region, ch.ChangeNumber, sess.AWSAccessKeyID, instanceIDs, nil)
 	if err != nil {
 		slog.Error("linux-qc-post runner.Start failed", "err", err)
 		jsonError(w, "failed to start execution", http.StatusInternalServerError)
@@ -1254,7 +1271,7 @@ func (s *Server) handleSFTExecScript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := middleware.GetSession(r)
-	batchID, err := s.startToolJob(r, script, platform, accountID, region, "", sess.AWSAccessKeyID, []string{instanceID})
+	batchID, err := s.startToolJob(r, script, platform, accountID, region, "", sess.AWSAccessKeyID, []string{instanceID}, nil)
 	if err != nil {
 		slog.Error("sft-fixer runner.Start failed", "script_type", req.ScriptType, "err", err)
 		jsonError(w, "failed to start execution", http.StatusInternalServerError)
@@ -1541,7 +1558,7 @@ func (s *Server) handleRHSAExecute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sess := middleware.GetSession(r)
-	batchID, err := s.startToolJob(r, script, "linux", accountID, region, "", sess.AWSAccessKeyID, req.InstanceIDs)
+	batchID, err := s.startToolJob(r, script, "linux", accountID, region, "", sess.AWSAccessKeyID, req.InstanceIDs, nil)
 	if err != nil {
 		slog.Error("rhsa runner.Start failed", "check_type", checkType, "err", err)
 		jsonError(w, "failed to start execution", http.StatusInternalServerError)

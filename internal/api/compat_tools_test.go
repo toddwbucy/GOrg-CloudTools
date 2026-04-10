@@ -463,7 +463,7 @@ func TestSFTExecScript_MissingRegion(t *testing.T) {
 				"instance_id": "i-aaa", "account_number": "123456789012",
 				// region omitted
 			},
-			"script_type": "sft_detect",
+			"script_type": "detect",
 		}))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
@@ -486,7 +486,7 @@ func TestSFTExecScript_MissingAccountNumber(t *testing.T) {
 				"instance_id": "i-aaa", "region": "us-east-1",
 				// account_number omitted
 			},
-			"script_type": "sft_detect",
+			"script_type": "detect",
 		}))
 	if err != nil {
 		t.Fatalf("POST: %v", err)
