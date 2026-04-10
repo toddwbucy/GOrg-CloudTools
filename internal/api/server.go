@@ -136,7 +136,10 @@ func (s *Server) registerRoutes() {
 		execRL.Wrap(http.HandlerFunc(s.handleExecuteTool)))
 
 	// ── Script runner compat ──────────────────────────────────────────────────
-	s.registerScriptRunnerCompatRoutes(execRL, readRL)
+	s.registerScriptRunnerCompatRoutes(execRL, readRL, writeRL)
+
+	// ── Tool-specific compat (linux-qc, sft-fixer, disk-recon, rhsa, decom) ──
+	s.registerToolCompatRoutes(execRL, readRL)
 
 	// ── Change management aliases (per-tool namespace) ─────────────────────────
 	// Each tool that embeds change-management.js sets toolEndpoint to its prefix

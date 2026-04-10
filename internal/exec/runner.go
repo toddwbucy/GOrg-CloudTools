@@ -59,6 +59,10 @@ type ScriptRequest struct {
 	// CallerKey is the AWS access-key ID of the caller; stored on the batch so
 	// read-side endpoints can scope results to the originating session.
 	CallerKey string
+	// ExecutionMetadata is stored on each Execution record created by this job.
+	// Callers can use it to tag runs with workflow-specific metadata (e.g.
+	// {"qc_step": "step1_initial_qc"}) for later retrieval.
+	ExecutionMetadata map[string]any
 }
 
 // Runner executes scripts against EC2 instances via SSM and persists results.
@@ -177,14 +181,15 @@ func (r *Runner) runOne(
 ) {
 	now := time.Now()
 	exec := &models.Execution{
-		ScriptID:     script.ID,
-		BatchID:      &batchID,
-		InstanceID:   instanceID,
-		AccountID:    req.AccountID,
-		Region:       req.Region,
-		Status:       models.ExecutionStatusRunning,
-		StartTime:    now,
-		ChangeNumber: req.ChangeNumber,
+		ScriptID:          script.ID,
+		BatchID:           &batchID,
+		InstanceID:        instanceID,
+		AccountID:         req.AccountID,
+		Region:            req.Region,
+		Status:            models.ExecutionStatusRunning,
+		StartTime:         now,
+		ChangeNumber:      req.ChangeNumber,
+		ExecutionMetadata: req.ExecutionMetadata,
 	}
 	if err := r.db.Create(exec).Error; err != nil {
 		slog.Error("failed to create execution record; skipping SSM send", "instance", instanceID, "batch", batchID, "err", err)

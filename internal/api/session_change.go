@@ -185,6 +185,117 @@ func (s *Server) handleSaveChangeWithInstances(w http.ResponseWriter, r *http.Re
 	jsonOK(w, map[string]any{"status": "ok", "change_id": change.ID})
 }
 
+// handleSaveManualChange creates (or finds) a Change from a textarea list of
+// instance IDs and loads it into the session. Unlike save-change-with-instances,
+// the caller provides plain instance IDs only; account_id and region are taken
+// from the request body (required) rather than session credentials because the
+// session does not store region.
+//
+// JSON body fields:
+//
+//	change_number  — string, required
+//	instance_ids   — []string, required (one EC2 instance ID per element)
+//	account_id     — string, required
+//	region         — string, required
+//	platform       — string, optional (defaults to "linux")
+//
+// Route: POST /aws/script-runner/save-manual-change
+func (s *Server) handleSaveManualChange(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ChangeNumber string   `json:"change_number"`
+		InstanceIDs  []string `json:"instance_ids"`
+		AccountID    string   `json:"account_id"`
+		Region       string   `json:"region"`
+		Platform     string   `json:"platform"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		jsonError(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
+	req.ChangeNumber = strings.TrimSpace(req.ChangeNumber)
+	if req.ChangeNumber == "" {
+		jsonError(w, "change_number is required", http.StatusBadRequest)
+		return
+	}
+	if len(req.InstanceIDs) == 0 {
+		jsonError(w, "instance_ids must not be empty", http.StatusBadRequest)
+		return
+	}
+	if req.AccountID == "" {
+		jsonError(w, "account_id is required", http.StatusBadRequest)
+		return
+	}
+	if req.Region == "" {
+		jsonError(w, "region is required", http.StatusBadRequest)
+		return
+	}
+	if req.Platform == "" {
+		req.Platform = "linux"
+	}
+
+	// Deduplicate instance IDs while preserving order.
+	seen := make(map[string]struct{}, len(req.InstanceIDs))
+	unique := req.InstanceIDs[:0]
+	for _, id := range req.InstanceIDs {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; !ok {
+			seen[id] = struct{}{}
+			unique = append(unique, id)
+		}
+	}
+	if len(unique) == 0 {
+		jsonError(w, "no valid instance_ids after deduplication", http.StatusBadRequest)
+		return
+	}
+
+	var change models.Change
+	if err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("change_number = ?", req.ChangeNumber).First(&change).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			change = models.Change{
+				ChangeNumber: req.ChangeNumber,
+				Status:       models.ChangeStatusNew,
+			}
+			if err := tx.Create(&change).Error; err != nil {
+				return err
+			}
+		}
+		// Replace all instances for this change.
+		if err := tx.Where("change_id = ?", change.ID).Delete(&models.ChangeInstance{}).Error; err != nil {
+			return err
+		}
+		for _, instID := range unique {
+			ci := models.ChangeInstance{
+				ChangeID:   change.ID,
+				InstanceID: instID,
+				AccountID:  req.AccountID,
+				Region:     req.Region,
+				Platform:   req.Platform,
+			}
+			if err := tx.Create(&ci).Error; err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		jsonError(w, "database error", http.StatusInternalServerError)
+		return
+	}
+
+	sess := middleware.GetSession(r)
+	sess.CurrentChangeID = change.ID
+	if err := middleware.SaveSession(w, s.ses, sess); err != nil {
+		jsonError(w, "failed to save session", http.StatusInternalServerError)
+		return
+	}
+	jsonOK(w, map[string]any{"status": "ok", "change_id": change.ID, "instances": len(unique)})
+}
+
 // handleClearChange removes the current change from the session.
 //
 // Route: POST {tool-prefix}/clear-change

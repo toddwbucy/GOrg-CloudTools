@@ -553,6 +553,258 @@ func TestUploadChangeCSV_Success(t *testing.T) {
 	}
 }
 
+// ── upload-csv (legacy alias) ─────────────────────────────────────────────────
+
+func TestUploadCSVAlias_NoAuth(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	csvContent := "change_number,platform,region,account_id,instance_id\nCHG-ALIAS,linux,us-east-1,111111111111,i-alias1\n"
+	body, ct := multipartCSV(t, csvContent)
+	res, err := http.Post(ts.URL+"/aws/script-runner/upload-csv", ct, body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", res.StatusCode)
+	}
+}
+
+// TestUploadCSVAlias_Success verifies that /upload-csv and /upload-change-csv both
+// accept the same CSV and produce equivalent results.
+func TestUploadCSVAlias_Success(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	csvContent := strings.Join([]string{
+		"change_number,platform,region,account_id,instance_id",
+		"CHG-ALIAS,linux,us-east-1,111111111111,i-alias1",
+	}, "\n")
+
+	body, ct := multipartCSV(t, csvContent)
+	res, err := client.Post(ts.URL+"/aws/script-runner/upload-csv", ct, body)
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var got map[string]any
+	decodeJSON(t, res, &got)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
+	if got["change_id"] == nil {
+		t.Error("response missing change_id")
+	}
+}
+
+// ── save-manual-change ────────────────────────────────────────────────────────
+
+func TestSaveManualChange_NoAuth(t *testing.T) {
+	db := newTestDB(t)
+	ts := newTestServer(t, db)
+
+	res, err := http.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MAN",
+			"instance_ids":  []string{"i-aaa"},
+			"account_id":    "123456789012",
+			"region":        "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_MissingChangeNumber(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"instance_ids": []string{"i-aaa"},
+			"account_id":   "123456789012",
+			"region":       "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_MissingInstanceIDs(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MAN",
+			"instance_ids":  []string{},
+			"account_id":    "123456789012",
+			"region":        "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_MissingAccountID(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MAN",
+			"instance_ids":  []string{"i-aaa"},
+			"region":        "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_MissingRegion(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MAN",
+			"instance_ids":  []string{"i-aaa"},
+			"account_id":    "123456789012",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", res.StatusCode)
+	}
+}
+
+func TestSaveManualChange_Success(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-MANUAL",
+			"instance_ids":  []string{"i-001", "i-002", "i-002"}, // duplicate deduplicated
+			"account_id":    "123456789012",
+			"region":        "us-east-1",
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var got map[string]any
+	decodeJSON(t, res, &got)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
+	changeID, ok := got["change_id"].(float64)
+	if !ok || changeID == 0 {
+		t.Fatalf("expected non-zero change_id, got %v", got["change_id"])
+	}
+	instCount, ok := got["instances"].(float64)
+	if !ok {
+		t.Fatalf("instances is not a number: %T", got["instances"])
+	}
+	// Duplicate i-002 should be collapsed to 2 unique instances.
+	if instCount != 2 {
+		t.Errorf("expected instances=2 after dedup, got %v", instCount)
+	}
+
+	// Verify DB instances.
+	var count int64
+	if res := db.Model(&models.ChangeInstance{}).Where("change_id = ?", uint(changeID)).Count(&count); res.Error != nil {
+		t.Fatalf("count query: %v", res.Error)
+	}
+	if count != 2 {
+		t.Errorf("expected 2 DB instances, got %d", count)
+	}
+
+	// Session should have the change loaded.
+	res2, err := client.Get(ts.URL + "/aws/script-runner/current-change")
+	if err != nil {
+		t.Fatalf("GET current-change: %v", err)
+	}
+	if res2.StatusCode != http.StatusOK {
+		res2.Body.Close()
+		t.Fatalf("expected 200 on current-change, got %d", res2.StatusCode)
+	}
+	var current models.Change
+	decodeJSON(t, res2, &current)
+	if current.ChangeNumber != "CHG-MANUAL" {
+		t.Errorf("expected CHG-MANUAL in session, got %q", current.ChangeNumber)
+	}
+}
+
+func TestSaveManualChange_DefaultPlatform(t *testing.T) {
+	db := newTestDB(t)
+	ts := newDevModeTestServer(t, db)
+	client := newTestClient(t)
+	authAndStore(t, client, ts.URL)
+
+	res, err := client.Post(ts.URL+"/aws/script-runner/save-manual-change",
+		"application/json",
+		jsonBody(t, map[string]any{
+			"change_number": "CHG-PLAT",
+			"instance_ids":  []string{"i-plat1"},
+			"account_id":    "123456789012",
+			"region":        "us-gov-west-1",
+			// platform omitted — should default to "linux"
+		}))
+	if err != nil {
+		t.Fatalf("POST: %v", err)
+	}
+	var got map[string]any
+	decodeJSON(t, res, &got)
+	if res.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", res.StatusCode)
+	}
+	changeID := uint(got["change_id"].(float64))
+
+	var inst models.ChangeInstance
+	if err := db.Where("change_id = ?", changeID).First(&inst).Error; err != nil {
+		t.Fatalf("load instance: %v", err)
+	}
+	if inst.Platform != "linux" {
+		t.Errorf("expected default platform=linux, got %q", inst.Platform)
+	}
+}
+
 // ── current-change ────────────────────────────────────────────────────────────
 
 func TestGetCurrentChange_NoSession(t *testing.T) {
